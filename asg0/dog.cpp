@@ -12,12 +12,17 @@ int main(int argc, char *argv[])
     char buff[32768] = "";
     size_t bytes = 1;
     size_t endOfFile = 1;
-
-    //Checks the stdin for the key char "-" and then prints user input to stdout   
-    for (int i = 1; i < argc; i++)
+    int fileNumber = 1;
+    //Changes fileNumber only if ./dog is typed
+    if(argc == 1)
     {
-        fileDescriptor = open(argv[i], O_RDONLY);
-        if(strncmp(argv[i],"-", 1) == 0)
+    	fileNumber = 0;
+    }
+    //Checks the stdin for the key char "-" and then prints user input to stdout   
+    while(argv[fileNumber] != NULL)
+    {
+        fileDescriptor = open(argv[fileNumber], O_RDONLY);
+        if(strncmp(argv[fileNumber],"-", 1) == 0 || argc == 1)
         {
             while(true)
             {
@@ -35,9 +40,9 @@ int main(int argc, char *argv[])
             }
         }
         //If the the name is not a file and is not "-" print an error
-        else if(fileDescriptor < 0 && strncmp(argv[i],"-", 1) != 0)
+        else if(fileDescriptor < 0 && strncmp(argv[fileNumber],"-", 1) != 0)
         {
-           err(1, "%s", argv[i]); 
+           warn("%s", argv[fileNumber]); 
         }
         //If the file does exist print out the contents.
         else
@@ -50,7 +55,8 @@ int main(int argc, char *argv[])
             }
             bytes = 1;
             close(fileDescriptor); 
-        } 
+        }
+        fileNumber++;	
     }
     return 0;        
 }
