@@ -18,11 +18,11 @@ int main(int argc, char *argv[])
     {
     	fileNumber = 0;
     }
-    //Checks the stdin for the key char "-" and then prints user input to stdout   
     while(argv[fileNumber] != NULL)
     {
         fileDescriptor = open(argv[fileNumber], O_RDONLY);
-        if(strncmp(argv[fileNumber],"-", 1) == 0 || argc == 1)
+        //Checks the stdin for the key char "-" and then prints user input to stdout   
+		if(strncmp(argv[fileNumber],"-", 1) == 0 || argc == 1)
         {
             while(true)
             {
