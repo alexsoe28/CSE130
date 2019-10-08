@@ -4,7 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
+#include <err.h>
 #include <unistd.h>
 int main(int argc, char *argv[])
 {
@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
         //If the the name is not a file and is not "-" print an error
         else if(fileDescriptor < 0 && strncmp(argv[i],"-", 1) != 0)
         {
-            fprintf(stdout, "dog: %s : No such file or directory\n", argv[i]);
+           err(1, "%s", argv[i]); 
         }
         //If the file does exist print out the contents.
         else
