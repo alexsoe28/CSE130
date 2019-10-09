@@ -10,7 +10,7 @@ cruzid: asoe
   - DESIGN.pdf
  
 # How To Run:
-To run type ./dog followed by either a "-" or file name
+Type "Make" to compile. To run type ./dog followed by either a "-" or file name
 
 
 
