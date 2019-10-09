@@ -1,0 +1,19 @@
+# Asg0: Dog
+Name: Alexander Soe
+cruzid: asoe
+
+# Files:
+  - README.md
+  - dog.cpp
+  - Makefile
+  - WRITEUP.pdf
+  - DESIGN.pdf
+ 
+# How To Run:
+To run type ./dog followed by either a "-" or file name
+
+
+
+
+
+
