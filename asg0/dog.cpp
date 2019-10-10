@@ -41,10 +41,13 @@ int main(int argc, char *argv[])
             }
         }
         //If the the name is not a file, is a directory, or is not "-" print an error
-  		else if((fileDescriptor < 0 && strncmp(argv[fileNumber],"-", 1) != 0) || bytes < 0)
+  		else if(fileDescriptor < 0 && strncmp(argv[fileNumber],"-", 1) != 0)
         {
-           warn("%s", argv[fileNumber]); 
+           fprintf(stderr, "%s: %s: %s\n", "dog", argv[fileNumber], "No such file or directory"); 
         }
+		else if (bytes < 0){
+	       warn("%s", argv[fileNumber]); 		
+		}
         //If the file does exist print out the contents.
         else
         {
