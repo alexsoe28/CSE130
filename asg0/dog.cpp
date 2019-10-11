@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     while(argv[fileNumber] != NULL)
     {
         fileDescriptor = open(argv[fileNumber], O_RDONLY);
-		bytes = read(fileDescriptor, buff, sizeof(buff)); 
+		//bytes = read(fileDescriptor, buff, sizeof(buff)); 
         //Checks the stdin for the key char "-" and then prints user input to stdout   
 		if(strncmp(argv[fileNumber],"-", 1) == 0 || argc == 1)
         {
@@ -40,18 +40,15 @@ int main(int argc, char *argv[])
                 }
             }
         }
-        //If the the name is not a file, is a directory, or is not "-" print an error
-  		else if(fileDescriptor < 0 && strncmp(argv[fileNumber],"-", 1) != 0)
-        {
-           fprintf(stderr, "%s: %s: %s\n", "dog", argv[fileNumber], "No such file or directory"); 
-        }
-		else if (bytes < 0){
-	       warn("%s", argv[fileNumber]); 		
+        //If the the name is not a file, is a directory
+		else if (fileDescriptor < 0 || read(fileDescriptor, buff, sizeof(buff) < 0))
+		{
+	       	warn("%s", argv[fileNumber]);
 		}
+
         //If the file does exist print out the contents.
         else
         {
-			write(1, buff, bytes);
             while(bytes != 0)
             {
                 memset(buff, 0, sizeof buff);
