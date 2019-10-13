@@ -10,9 +10,9 @@ int main(int argc, char *argv[])
 {
     int fileDescriptor;
     char buff[32768] = "";
-    int bytes = 1;
-    int endOfFile = 1;
-    int fileNumber = 1;
+    int64_t bytes = 1;
+    int64_t endOfFile = 1;
+    int64_t fileNumber = 1;
     //Changes fileNumber only if ./dog is typed
     if(argc == 1)
     {
