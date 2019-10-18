@@ -1,6 +1,6 @@
-SOURCES=dog.cpp
+SOURCES=httpserver.cpp
 INCLUDES=$(wildcard *.h)
-TARGET=dog
+TARGET=httpserver
 CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -Og
 LDFLAGS=
 _submit_CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -O2
