@@ -6,16 +6,23 @@
 #include <string.h>
 #define PORT 8080
 
-int main(int argc, char const *argv[])
+/*
+void handle_client(int fd)
 {
-    int server_fd, new_socket, valread;
+    char response_data[2048];
+    char data[2048] = "HTTP/1.1 200 OK\r\n";
+    
+}
+*/
+int main()
+{
+    int server_fd, client_socket;
     struct sockaddr_in address;
-    int opt = 1;
     int addrlen = sizeof(address);
     char buffer[1024] = {0};
     if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
-        perror("socket failed");
+        perror("ERROR: Socket failed");
         exit(EXIT_FAILURE);
     }
     address.sin_family = AF_INET;
@@ -24,27 +31,34 @@ int main(int argc, char const *argv[])
     
     if(bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
-        perror("bind failed");
+        perror("ERROR: Bind failed");
         exit(EXIT_FAILURE);
     }
     if(listen(server_fd, 3) < 0)
     {
-        perror("listen");
+        perror("ERROR: Listen failed");
         exit(EXIT_FAILURE);
     }
-    if((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
+    while(1)
     {
-        perror("accept");
-        exit(EXIT_FAILURE);
-    }
-    valread = read(new_socket, buffer, 1024);
-    while(valread != 0)
-    {
-        valread = read(new_socket, buffer, 1024);
+        if((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
+        {
+            perror("ERROR: Could not accept socket");
+            exit(EXIT_FAILURE);
+        }
+        int client_data = read(client_socket, buffer, sizeof buffer);
+        if(client_data < 0)
+        {
+            perror("ERROR: Could not read from socket");
+            exit(EXIT_FAILURE);
+        }
         printf("%s\n", buffer);
+        client_data = write(client_socket, "I got your message", 18);
+        //handle_client(client_socket);
+        close(client_socket);
     }
-    
     
     close(server_fd);
     return 0;
 }
+
