@@ -7,10 +7,12 @@
 #include <string>
 #include <arpa/inet.h>
 #include <iostream>
+#include <sstream>
+#include <vector>
 #define PORT 8080
 
 const size_t buffSize = 4097;
-
+//Function for returning the header as string
 std::string readHeader(int fd)
 {
     char buffer[buffSize];
@@ -19,20 +21,26 @@ std::string readHeader(int fd)
     ssize_t n;
     p = buffer;
 
+    //While the we can read from the client socket
     while((n = read(fd, p, len)) > 0)
     {
         len = len - n;
         p = p + n;
+
+        //Checks if we are at the end of the header
         if(strstr(buffer, "\n\r") != nullptr)
         {
-            printf("%s\n", "We have reached the end of the header");
             break;
         }
+
+        //Check if we have exceeded the header buffer
         if(len == 0)
         {
             break;
         }
     }
+    //printf("%zd\n", len);
+    //Initialize the pointer to the end of our new string with the Null character
     *p = '\0';
     if(n < 0)
     {
@@ -47,9 +55,30 @@ std::string readHeader(int fd)
     return std::string(buffer);
 }
 
+//Parse through the Header for a content length number
+ssize_t getContentLength(std::string Header)
+{
+    char const* cl = strstr(Header.c_str(), "Content-Length:");
+    if(cl != nullptr)
+    {
+        ssize_t length;
+        int contentLength = sscanf(cl, "Content-Length: %zd", &length);
+        if(contentLength != -1)
+        {
+            return length;
+        }
+        else
+        {
+            perror("ERROR: No Content Length given");
+            exit(EXIT_FAILURE);
+        }
+    }
+    return -1;
+}
+
 int main(int argc, char *argv[])
 {
-    char buff[buffSize];
+    char fileContents[buffSize];
     char const http_header[2048] = "HTTP/1.1 200 OK\r\n";
     int server_fd, client_fd;
     struct sockaddr_in address;
@@ -110,6 +139,7 @@ int main(int argc, char *argv[])
     }
 
     //Respond to get and put requests
+
     while(1)
     {
         if((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
@@ -117,12 +147,35 @@ int main(int argc, char *argv[])
             perror("ERROR: Could not accept socket");
             exit(EXIT_FAILURE);
         }
+        //Write response back to client
         write(client_fd, http_header, sizeof http_header);
+
+        //Retrieve Header
         std::string header = readHeader(client_fd); 
-        printf("%s\n", header.c_str());
-        std::cout << header.length() << std::endl;
-        read(client_fd, buff, sizeof buff - 1);
-        write(1, buff, sizeof buff - 1);
+        ssize_t contLength = getContentLength(header);
+
+        //Use string stream to extract tokens
+        std::vector <std::string> tokenVector;
+        std::istringstream tokStream(header);
+        std::string token;
+        while(std::getline(tokStream, token, ' '))
+        {
+            tokenVector.push_back(token);
+        }
+        const char *fileName = tokenVector[1].c_str();
+        printf("%s\n", fileName);
+
+        if(strstr(header.c_str(), "PUT") != nullptr)
+        {
+            while(read(client_fd, fileContents, sizeof fileContents - 1) != -1)
+            {
+                write(1, fileContents, sizeof fileContents - 1);
+            }
+        }
+        if(strstr(header.c_str(), "GET") != nullptr)
+        {
+            printf("%s", "This is a GET command\n");           
+        }
         close(client_fd);
     }
     
