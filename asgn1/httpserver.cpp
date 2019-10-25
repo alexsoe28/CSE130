@@ -12,6 +12,7 @@
 #define PORT 8080
 
 const size_t buffSize = 4097;
+const size_t fileSize = 27;
 //Function for returning the header as string
 std::string readHeader(int fd)
 {
@@ -63,7 +64,7 @@ ssize_t getContentLength(std::string Header)
     {
         ssize_t length;
         int contentLength = sscanf(cl, "Content-Length: %zd", &length);
-        if(contentLength != -1)
+        if(contentLength > 0)
         {
             return length;
         }
@@ -162,15 +163,62 @@ int main(int argc, char *argv[])
         {
             tokenVector.push_back(token);
         }
-        const char *fileName = tokenVector[1].c_str();
-        printf("%s\n", fileName);
 
+        //Get fileName and create file
+        std::string fileNameString = tokenVector[1];
+        if(fileNameString.length() > fileSize || fileNameString.length() < fileSize)
+        {
+            perror("ERROR: Invalid File Length");
+            close(client_fd);
+        }
+        char fileChar[fileSize];
+        strcpy(fileChar, fileNameString.c_str());
+        for(size_t i = 0; i < fileSize; i++)
+        {
+            if(fileChar[i] == 45 || fileChar[i] == 95 || 
+              (fileChar[i] >= 48 && fileChar[i] <= 57) || 
+              (fileChar[i] >= 65 && fileChar[i] <= 90) || 
+              (fileChar[i] >= 97 && fileChar[i] <= 122))
+            {
+                continue;
+            }
+            else
+            {
+                perror("ERROR: Invalid File Format");
+                close(client_fd);
+            }
+        }
+
+        //Respond to a PUT command
         if(strstr(header.c_str(), "PUT") != nullptr)
         {
-            while(read(client_fd, fileContents, sizeof fileContents - 1) != -1)
-            {
-                write(1, fileContents, sizeof fileContents - 1);
+            
+            //Check if the file name is of appropriate length            
+            int file = 1;
+            if(contLength != -1){
+                while(contLength > 0)
+                {
+                    if((size_t)contLength <= buffSize)
+                    {
+                        read(client_fd, fileContents, contLength);
+                        write(1, fileContents, contLength);
+                        break;
+                    }
+                    read(client_fd, fileContents, buffSize);
+                    write(1, fileContents, buffSize);
+                    contLength = contLength - buffSize; 
+                }
             }
+            else
+            {
+                while(file != 0)
+                {
+                    memset(fileContents, 0, buffSize);
+                    file = read(client_fd, fileContents, buffSize);
+                    write(1, fileContents, buffSize);
+                }
+            }
+            
         }
         if(strstr(header.c_str(), "GET") != nullptr)
         {
