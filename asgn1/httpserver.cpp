@@ -125,12 +125,16 @@ std::string getFileName(std::string header)
     return fileName;
 }
 
+//Handles when the client requests a PUT command
 void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
+    char const http_header[19] = "HTTP/1.1 200 OK\r\n";
+    write(client_fd, http_header, sizeof http_header);
     char fileContents[buffSize];
     int file = 1;
     if(contLength != -1){
-        int newfd = open(fileNameChar, O_CREAT | O_WRONLY);
+
+        int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
         while(contLength > 0)
         {
             if((size_t)contLength <= buffSize)
@@ -148,7 +152,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         else
         {
             //If there is no content length print until eof
-            int newfd = open(fileNameChar, O_WRONLY);
+            int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
             while(file != 0)
             {
                 memset(fileContents, 0, buffSize);
@@ -159,10 +163,27 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         }
 }
 
-
+//Handles GET requests
+/*
+void handleGET(char fileNameChar[], int client_fd)
+{
+    char fileContents[buffSize];
+    int file = 1;
+    if(access(fileNameChar, F_OK) == -1)
+    {
+        
+        return;
+    }
+    if(access(fileNameChar, R_OK) == -1)
+    {
+        return;
+    }
+    struct stat statVal;
+    stat(, &statVal);
+}
+*/
 int main(int argc, char *argv[])
 {
-    char const http_header[2048] = "HTTP/1.1 200 OK\r\n";
     int server_fd, client_fd;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -237,10 +258,7 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        //Write response back to client
-        write(client_fd, http_header, sizeof http_header);
-
-        //Retrieve Header and get file name and content length
+        //Retrieve Header, file name, and content length
         std::string header = readHeader(client_fd); 
         ssize_t contLength = getContentLength(header);
         std::string fileName = getFileName(header);
@@ -254,6 +272,7 @@ int main(int argc, char *argv[])
         }
         char fileNameChar[fileSize];
         strcpy(fileNameChar, fileName.c_str());
+
         //Respond to a PUT command
         if(strstr(header.c_str(), "PUT") != nullptr)
         {   
@@ -261,12 +280,10 @@ int main(int argc, char *argv[])
         }
         if(strstr(header.c_str(), "GET") != nullptr)
         {
+//            handleGET(fileNameChar, contLength, client_fd);
             printf("%s", "This is a GET command\n");           
         }
         close(client_fd);
-                            printf("Hey You're accepted");
-        fflush(stdout);
-
     }   
     close(server_fd);
     return 0;
