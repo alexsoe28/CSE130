@@ -81,9 +81,87 @@ ssize_t getContentLength(std::string Header)
     return -1;
 }
 
-int main(int argc, char *argv[])
+//Check if file is correctly formatted
+bool isCorrectFileName(std::string fileName)
+{
+
+    //Check if fileName is the correct size
+    if(fileName.length() > fileSize || fileName.length() < fileSize)
+    {
+        return false;
+    }
+    //Check if fileName has proper characters
+    char fileNameChar[fileSize];
+    strcpy(fileNameChar, fileName.c_str());
+    for(size_t i = 0; i < fileSize; i++)
+    {
+        if(fileNameChar[i] == 45 || fileNameChar[i] == 95 || 
+          (fileNameChar[i] >= 48 && fileNameChar[i] <= 57) || 
+          (fileNameChar[i] >= 65 && fileNameChar[i] <= 90) || 
+          (fileNameChar[i] >= 97 && fileNameChar[i] <= 122))
+        {
+            continue;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+//Parse header for the name of the file
+std::string getFileName(std::string header)
+{
+    //Use string stream to extract tokens
+    std::vector <std::string> tokenVector;
+    std::istringstream tokStream(header);
+    std::string token;
+    while(std::getline(tokStream, token, ' '))
+    {
+        tokenVector.push_back(token);
+    }
+    std::string fileName = tokenVector[1];
+    return fileName;
+}
+
+void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
     char fileContents[buffSize];
+    int file = 1;
+    if(contLength != -1){
+        int newfd = open(fileNameChar, O_CREAT | O_WRONLY);
+        while(contLength > 0)
+        {
+            if((size_t)contLength <= buffSize)
+            {
+                read(client_fd, fileContents, contLength);
+                write(newfd, fileContents, contLength);
+                break;
+            }
+            read(client_fd, fileContents, buffSize);
+            write(newfd, fileContents, buffSize);
+            contLength = contLength - buffSize; 
+        }
+        close(newfd);
+        }
+        else
+        {
+            //If there is no content length print until eof
+            int newfd = open(fileNameChar, O_WRONLY);
+            while(file != 0)
+            {
+                memset(fileContents, 0, buffSize);
+                file = read(client_fd, fileContents, buffSize);
+                write(newfd, fileContents, buffSize);
+            }
+            close(newfd);
+        }
+}
+
+
+int main(int argc, char *argv[])
+{
     char const http_header[2048] = "HTTP/1.1 200 OK\r\n";
     int server_fd, client_fd;
     struct sockaddr_in address;
@@ -107,7 +185,6 @@ int main(int argc, char *argv[])
 
     //Initialize port and address
     struct hostent *he;
-
     address.sin_family = AF_INET;
     int user_port;
     if(argc == 1)
@@ -118,7 +195,7 @@ int main(int argc, char *argv[])
     else if (argc == 2)
     {
         if ( (he = gethostbyname(argv[1]) ) == NULL ) {
-            exit(1); /* error */
+            exit(1);
         }
         address.sin_port = htons(PORT);
         memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);       
@@ -152,7 +229,6 @@ int main(int argc, char *argv[])
     }
 
     //Respond to get and put requests
-
     while(1)
     {
         if((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
@@ -164,84 +240,24 @@ int main(int argc, char *argv[])
         //Write response back to client
         write(client_fd, http_header, sizeof http_header);
 
-        //Retrieve Header
+        //Retrieve Header and get file name and content length
         std::string header = readHeader(client_fd); 
         ssize_t contLength = getContentLength(header);
-
-        //Use string stream to extract tokens
-        std::vector <std::string> tokenVector;
-        std::istringstream tokStream(header);
-        std::string token;
-        while(std::getline(tokStream, token, ' '))
+        std::string fileName = getFileName(header);
+        
+        //Check if valid fileName
+        if(isCorrectFileName(fileName) == false)
         {
-            tokenVector.push_back(token);
-        }
-
-        //Get fileName and check if it is valid
-        std::string fileNameString = tokenVector[1];
-
-        //Check if fileName is the correct size
-        if(fileNameString.length() > fileSize || fileNameString.length() < fileSize)
-        {
-            perror("ERROR: Invalid File Length");
+            perror("ERROR: Invalid File Format");
             close(client_fd);
             continue;
         }
-        //Check if fileName is correct format
         char fileNameChar[fileSize];
-        strcpy(fileNameChar, fileNameString.c_str());
-        for(size_t i = 0; i < fileSize; i++)
-        {
-            if(fileNameChar[i] == 45 || fileNameChar[i] == 95 || 
-              (fileNameChar[i] >= 48 && fileNameChar[i] <= 57) || 
-              (fileNameChar[i] >= 65 && fileNameChar[i] <= 90) || 
-              (fileNameChar[i] >= 97 && fileNameChar[i] <= 122))
-            {
-                continue;
-            }
-            else
-            {
-                perror("ERROR: Invalid File Format");
-                close(client_fd);
-                continue;
-            }
-        }
-
+        strcpy(fileNameChar, fileName.c_str());
         //Respond to a PUT command
         if(strstr(header.c_str(), "PUT") != nullptr)
         {   
-            //Check if the file name is of appropriate length            
-            int file = 1;
-            if(contLength != -1){
-                int newfd = open(fileNameChar, O_CREAT | O_WRONLY);
-                while(contLength > 0)
-                {
-
-                    if((size_t)contLength <= buffSize)
-                    {
-                        read(client_fd, fileContents, contLength);
-                        write(1, fileContents, contLength);
-                        break;
-                    }
-                    read(client_fd, fileContents, buffSize);
-                    write(newfd, fileContents, buffSize);
-                    contLength = contLength - buffSize; 
-                }
-                close(newfd);
-            }
-            else
-            {
-                //If there is no content length print until eof
-                int newfd = open(fileNameChar, O_WRONLY);
-                while(file != 0)
-                {
-                    memset(fileContents, 0, buffSize);
-                    file = recv(client_fd, fileContents, buffSize, 0);
-                    write(newfd, fileContents, buffSize);
-                }
-                close(newfd);
-            }
-            
+            handlePUT(fileNameChar, contLength, client_fd);
         }
         if(strstr(header.c_str(), "GET") != nullptr)
         {
