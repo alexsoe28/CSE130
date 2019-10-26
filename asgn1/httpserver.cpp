@@ -9,6 +9,10 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <netdb.h>
 #define PORT 8080
 
 const size_t buffSize = 4097;
@@ -88,7 +92,7 @@ int main(int argc, char *argv[])
     //char buffer[buffSize];
 
     //Check if the user inputs too many arguments
-    if(argc > 2)
+    if(argc > 3)
     {
         perror("ERROR: Invalid arguments");
         exit(EXIT_FAILURE);
@@ -102,22 +106,30 @@ int main(int argc, char *argv[])
     }
 
     //Initialize port and address
+    struct hostent *he;
+
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY;
     int user_port;
     if(argc == 1)
     {
         address.sin_port = htons(PORT);
+        address.sin_addr.s_addr = INADDR_ANY;
     }
     else if (argc == 2)
     {
+        if ( (he = gethostbyname(argv[1]) ) == NULL ) {
+            exit(1); /* error */
+        }
         address.sin_port = htons(PORT);
-        address.sin_addr.s_addr = inet_addr(argv[1]);   
+        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);       
     }
     else if(sscanf(argv[2], "%d", &user_port) != -1)
     {
+        if ( (he = gethostbyname(argv[1]) ) == NULL ) {
+            exit(1); /* error */
+        }
         address.sin_port = htons(user_port);
-        address.sin_addr.s_addr = inet_addr(argv[1]);       
+        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
     } 
     else
     {
@@ -148,6 +160,7 @@ int main(int argc, char *argv[])
             perror("ERROR: Could not accept socket");
             exit(EXIT_FAILURE);
         }
+
         //Write response back to client
         write(client_fd, http_header, sizeof http_header);
 
@@ -164,21 +177,25 @@ int main(int argc, char *argv[])
             tokenVector.push_back(token);
         }
 
-        //Get fileName and create file
+        //Get fileName and check if it is valid
         std::string fileNameString = tokenVector[1];
+
+        //Check if fileName is the correct size
         if(fileNameString.length() > fileSize || fileNameString.length() < fileSize)
         {
             perror("ERROR: Invalid File Length");
             close(client_fd);
+            continue;
         }
-        char fileChar[fileSize];
-        strcpy(fileChar, fileNameString.c_str());
+        //Check if fileName is correct format
+        char fileNameChar[fileSize];
+        strcpy(fileNameChar, fileNameString.c_str());
         for(size_t i = 0; i < fileSize; i++)
         {
-            if(fileChar[i] == 45 || fileChar[i] == 95 || 
-              (fileChar[i] >= 48 && fileChar[i] <= 57) || 
-              (fileChar[i] >= 65 && fileChar[i] <= 90) || 
-              (fileChar[i] >= 97 && fileChar[i] <= 122))
+            if(fileNameChar[i] == 45 || fileNameChar[i] == 95 || 
+              (fileNameChar[i] >= 48 && fileNameChar[i] <= 57) || 
+              (fileNameChar[i] >= 65 && fileNameChar[i] <= 90) || 
+              (fileNameChar[i] >= 97 && fileNameChar[i] <= 122))
             {
                 continue;
             }
@@ -186,18 +203,20 @@ int main(int argc, char *argv[])
             {
                 perror("ERROR: Invalid File Format");
                 close(client_fd);
+                continue;
             }
         }
 
         //Respond to a PUT command
         if(strstr(header.c_str(), "PUT") != nullptr)
-        {
-            
+        {   
             //Check if the file name is of appropriate length            
             int file = 1;
             if(contLength != -1){
+                int newfd = open(fileNameChar, O_CREAT | O_WRONLY);
                 while(contLength > 0)
                 {
+
                     if((size_t)contLength <= buffSize)
                     {
                         read(client_fd, fileContents, contLength);
@@ -205,18 +224,22 @@ int main(int argc, char *argv[])
                         break;
                     }
                     read(client_fd, fileContents, buffSize);
-                    write(1, fileContents, buffSize);
+                    write(newfd, fileContents, buffSize);
                     contLength = contLength - buffSize; 
                 }
+                close(newfd);
             }
             else
             {
+                //If there is no content length print until eof
+                int newfd = open(fileNameChar, O_WRONLY);
                 while(file != 0)
                 {
                     memset(fileContents, 0, buffSize);
-                    file = read(client_fd, fileContents, buffSize);
-                    write(1, fileContents, buffSize);
+                    file = recv(client_fd, fileContents, buffSize, 0);
+                    write(newfd, fileContents, buffSize);
                 }
+                close(newfd);
             }
             
         }
@@ -225,8 +248,10 @@ int main(int argc, char *argv[])
             printf("%s", "This is a GET command\n");           
         }
         close(client_fd);
-    }
-    
+                            printf("Hey You're accepted");
+        fflush(stdout);
+
+    }   
     close(server_fd);
     return 0;
 }
