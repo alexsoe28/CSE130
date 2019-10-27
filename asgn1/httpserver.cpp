@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <netdb.h>
-#define PORT 8080
+#define PORT 80
 
 const size_t buffSize = 4097;
 const size_t fileSize = 27;
@@ -84,7 +84,6 @@ ssize_t getContentLength(std::string Header)
 //Check if file is correctly formatted
 bool isCorrectFileName(std::string fileName)
 {
-
     //Check if fileName is the correct size
     if(fileName.length() > fileSize || fileName.length() < fileSize)
     {
@@ -128,12 +127,35 @@ std::string getFileName(std::string header)
 //Handles when the client requests a PUT command
 void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
-    char const http_header[19] = "HTTP/1.1 200 OK\r\n";
-    write(client_fd, http_header, sizeof http_header);
     char fileContents[buffSize];
     int file = 1;
-    if(contLength != -1){
+    bool fileExists = false;
 
+    //Checks if the file exists
+    if(access(fileNameChar, F_OK) >= 0)
+    {
+        fileExists = true;
+        if(access(fileNameChar, W_OK) == -1)
+        {
+            char msg[25] = "HTTP/1.1 403 Forbidden\r\n";
+            write(client_fd, msg, sizeof msg);
+            return;
+        }
+    }
+    if(fileExists == true)
+    {
+        char http_header[19] = "HTTP/1.1 200 OK\r\n";
+        write(client_fd, http_header, sizeof http_header);      
+    }
+    else
+    {
+        char http_header[23] = "HTTP/1.1 201 Created\r\n";
+        write(client_fd, http_header, sizeof http_header); 
+    }
+
+    //Write/create file
+    if(contLength != -1)
+    {    
         int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
         while(contLength > 0)
         {
@@ -149,39 +171,65 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         }
         close(newfd);
         }
-        else
+    else
+    {
+        //If there is no content length print until eof
+        int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
+        while(true)
         {
-            //If there is no content length print until eof
-            int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
-            while(file != 0)
+            memset(fileContents, 0, buffSize);
+            file = read(client_fd, fileContents, buffSize);
+            if(file != 0)
             {
-                memset(fileContents, 0, buffSize);
-                file = read(client_fd, fileContents, buffSize);
                 write(newfd, fileContents, buffSize);
             }
-            close(newfd);
+            else
+            {
+                break;
+            }
         }
+        close(newfd);
+    }
 }
 
 //Handles GET requests
-/*
 void handleGET(char fileNameChar[], int client_fd)
 {
     char fileContents[buffSize];
     int file = 1;
+
+    //Check if the file exists
     if(access(fileNameChar, F_OK) == -1)
     {
-        
+        char msg[25] = "HTTP/1.1 404 Not Found\r\n";
+        write(client_fd, msg, sizeof msg);
         return;
     }
     if(access(fileNameChar, R_OK) == -1)
     {
+        char msg[25] = "HTTP/1.1 403 Forbidden\r\n";
+        write(client_fd, msg, sizeof msg);
         return;
     }
+
+    //Print out content length with header
     struct stat statVal;
-    stat(, &statVal);
+    stat(fileNameChar, &statVal);
+    off_t contentLength = statVal.st_size;
+    std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\n";
+    write(client_fd, clientHeader.c_str(), clientHeader.length());
+    
+    //Print to client
+    int newfd = open(fileNameChar, O_RDONLY);
+    while(file != 0)
+    {
+        memset(fileContents, 0, buffSize);
+        file = read(newfd, fileContents, buffSize);
+        write(client_fd, fileContents, buffSize);
+    }
+    close(file);
 }
-*/
+
 int main(int argc, char *argv[])
 {
     int server_fd, client_fd;
@@ -274,14 +322,22 @@ int main(int argc, char *argv[])
         strcpy(fileNameChar, fileName.c_str());
 
         //Respond to a PUT command
+        if(strstr(header.c_str(), "PUT") == nullptr && strstr(header.c_str(), "GET") == nullptr)
+        {
+            char msg[37] = "HTTP/1.1 500 Internal Server Error\r\n";
+            write(client_fd, msg, sizeof msg);
+            close(client_fd);
+            continue;
+        }
+
         if(strstr(header.c_str(), "PUT") != nullptr)
         {   
             handlePUT(fileNameChar, contLength, client_fd);
         }
         if(strstr(header.c_str(), "GET") != nullptr)
         {
-//            handleGET(fileNameChar, contLength, client_fd);
-            printf("%s", "This is a GET command\n");           
+            handleGET(fileNameChar, client_fd);
+            //printf("%s", "This is a GET command\n");           
         }
         close(client_fd);
     }   
