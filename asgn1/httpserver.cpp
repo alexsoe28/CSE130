@@ -144,12 +144,14 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
     if(fileExists == true)
     {
-        char http_header[19] = "HTTP/1.1 200 OK\r\n";
+        //char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; //was 19 but prob should be 18
+        char http_header[20] = "HTTP/1.1 200 OK\r\n\r\n"; //was 19 but prob should be 18
         write(client_fd, http_header, sizeof http_header);      
     }
     else
     {
-        char http_header[23] = "HTTP/1.1 201 Created\r\n";
+        //char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; // was 23
+        char http_header[25] = "HTTP/1.1 201 Created\r\n\r\n"; // was 23
         write(client_fd, http_header, sizeof http_header); 
     }
 
@@ -179,14 +181,13 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         {
             memset(fileContents, 0, buffSize);
             file = read(client_fd, fileContents, buffSize);
-            if(file != 0)
+            //std::cout << file << std::endl;
+            if(file == 0)
             {
-                write(newfd, fileContents, buffSize);
-            }
-            else
-            {
+                //printf("breaking\n");
                 break;
             }
+            write(newfd, fileContents, file);
         }
         close(newfd);
     }
@@ -216,7 +217,7 @@ void handleGET(char fileNameChar[], int client_fd)
     struct stat statVal;
     stat(fileNameChar, &statVal);
     off_t contentLength = statVal.st_size;
-    std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\n";
+    std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\r\n\r\n";
     write(client_fd, clientHeader.c_str(), clientHeader.length());
     
     //Print to client
@@ -264,7 +265,7 @@ int main(int argc, char *argv[])
     else if (argc == 2)
     {
         if ( (he = gethostbyname(argv[1]) ) == NULL ) {
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         address.sin_port = htons(PORT);
         memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);       
@@ -272,7 +273,7 @@ int main(int argc, char *argv[])
     else if(sscanf(argv[2], "%d", &user_port) != -1)
     {
         if ( (he = gethostbyname(argv[1]) ) == NULL ) {
-            exit(1); /* error */
+            exit(EXIT_FAILURE);
         }
         address.sin_port = htons(user_port);
         memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
@@ -334,12 +335,13 @@ int main(int argc, char *argv[])
         {   
             handlePUT(fileNameChar, contLength, client_fd);
         }
+        //printf("got here\n");
         if(strstr(header.c_str(), "GET") != nullptr)
         {
             handleGET(fileNameChar, client_fd);
-            //printf("%s", "This is a GET command\n");           
         }
         close(client_fd);
+        //printf("got to the end of this thing\n");
     }   
     close(server_fd);
     return 0;
