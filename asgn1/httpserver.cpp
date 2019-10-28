@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <sys/select.h>
 #define PORT 80
 
 const size_t buffSize = 4097;
@@ -128,30 +129,34 @@ std::string getFileName(std::string header)
 void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
     char fileContents[buffSize];
-    int file = 1;
+    int fileInBytes = 1;
     bool fileExists = false;
+    bool ContentLength = false;
+    bool fileRead = false;
 
-    //Checks if the file exists
-    if(access(fileNameChar, F_OK) >= 0)
+    if(contLength != -1)
     {
-        fileExists = true;
+        ContentLength = true;
+    }
+    //Checks if the file exists
+    if(access(fileNameChar, F_OK) == 0)
+    {
         if(access(fileNameChar, W_OK) == -1)
         {
-            char msg[25] = "HTTP/1.1 403 Forbidden\r\n";
+            char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
             write(client_fd, msg, sizeof msg);
             return;
         }
+
     }
-    if(fileExists == true)
+    if(fileExists == true && ContentLength == true)
     {
-        //char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; //was 19 but prob should be 18
-        char http_header[20] = "HTTP/1.1 200 OK\r\n\r\n"; //was 19 but prob should be 18
+        char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n"; 
         write(client_fd, http_header, sizeof http_header);      
     }
-    else
+    if(fileExists == false && ContentLength == true)
     {
-        //char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; // was 23
-        char http_header[25] = "HTTP/1.1 201 Created\r\n\r\n"; // was 23
+        char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n"; 
         write(client_fd, http_header, sizeof http_header); 
     }
 
@@ -177,17 +182,25 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     {
         //If there is no content length print until eof
         int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
-        while(true)
+        while(fileInBytes != 0)
         {
             memset(fileContents, 0, buffSize);
-            file = read(client_fd, fileContents, buffSize);
-            //std::cout << file << std::endl;
-            if(file == 0)
+            fileInBytes = read(client_fd, fileContents, buffSize);
+            if(fileRead == false)
             {
-                //printf("breaking\n");
-                break;
+                if(fileExists == true)
+                {
+                    char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
+                    write(client_fd, http_header, sizeof http_header);      
+                }
+                else
+                {
+                    char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
+                    write(client_fd, http_header, sizeof http_header); 
+                }
+                fileRead = true;
             }
-            write(newfd, fileContents, file);
+            write(newfd, fileContents, fileInBytes);
         }
         close(newfd);
     }
@@ -202,13 +215,13 @@ void handleGET(char fileNameChar[], int client_fd)
     //Check if the file exists
     if(access(fileNameChar, F_OK) == -1)
     {
-        char msg[25] = "HTTP/1.1 404 Not Found\r\n";
+        char msg[46] = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, sizeof msg);
         return;
     }
     if(access(fileNameChar, R_OK) == -1)
     {
-        char msg[25] = "HTTP/1.1 403 Forbidden\r\n";
+        char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, sizeof msg);
         return;
     }
@@ -315,7 +328,7 @@ int main(int argc, char *argv[])
         //Check if valid fileName
         if(isCorrectFileName(fileName) == false)
         {
-            char msg[37] = "HTTP/1.1 400 Internal Server Error\r\n";
+            char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
             write(client_fd, msg, sizeof msg);
             close(client_fd);
             continue;
@@ -326,7 +339,7 @@ int main(int argc, char *argv[])
         //Respond to a PUT command
         if(strstr(header.c_str(), "PUT") == nullptr && strstr(header.c_str(), "GET") == nullptr)
         {
-            char msg[37] = "HTTP/1.1 500 Internal Server Error\r\n";
+            char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
             write(client_fd, msg, sizeof msg);
             close(client_fd);
             continue;

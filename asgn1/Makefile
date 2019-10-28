@@ -1,7 +1,7 @@
 SOURCES=httpserver.cpp
 INCLUDES=$(wildcard *.h)
 TARGET=httpserver
-CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -Og
+CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -O0
 LDFLAGS=
 _submit_CXXFLAGS=-std=gnu++11 -Wall -Wextra -Wpedantic -Wshadow -g -O2
 OBJECTS=$(SOURCES:.cpp=.o)
