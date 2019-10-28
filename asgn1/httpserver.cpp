@@ -207,6 +207,16 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
 }
 
+/*
+void handle(int client_fd)
+{
+    while(readHeader(client_fd))
+    {
+        
+    }
+}
+*/
+
 //Handles GET requests
 void handleGET(char fileNameChar[], int client_fd)
 {
@@ -273,8 +283,8 @@ int main(int argc, char *argv[])
     int user_port;
     if(argc == 1)
     {
-        address.sin_port = htons(PORT);
-        address.sin_addr.s_addr = INADDR_ANY;
+        perror("Usage: ./httpserver [address] [PORT]");
+        exit(EXIT_FAILURE);
     }
     else if (argc == 2)
     {
@@ -294,7 +304,7 @@ int main(int argc, char *argv[])
     } 
     else
     {
-        perror("ERROR: Invalid ");
+        perror("ERROR: Invalid format for httpserver");
         exit(EXIT_FAILURE);
     }
 
