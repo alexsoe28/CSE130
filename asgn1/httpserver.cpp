@@ -315,7 +315,8 @@ int main(int argc, char *argv[])
         //Check if valid fileName
         if(isCorrectFileName(fileName) == false)
         {
-            perror("ERROR: Invalid File Format");
+            char msg[37] = "HTTP/1.1 400 Internal Server Error\r\n";
+            write(client_fd, msg, sizeof msg);
             close(client_fd);
             continue;
         }
