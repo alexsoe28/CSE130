@@ -141,10 +141,11 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     //Checks if the file exists
     if(access(fileNameChar, F_OK) == 0)
     {
+        fileExists = true;
         if(access(fileNameChar, W_OK) == -1)
         {
             char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
-            write(client_fd, msg, sizeof msg);
+            write(client_fd, msg, strlen(msg));
             return;
         }
 
@@ -152,12 +153,12 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     if(fileExists == true && ContentLength == true)
     {
         char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n"; 
-        write(client_fd, http_header, sizeof http_header);      
+        write(client_fd, http_header, strlen(http_header));      
     }
     if(fileExists == false && ContentLength == true)
     {
         char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n"; 
-        write(client_fd, http_header, sizeof http_header); 
+        write(client_fd, http_header, strlen(http_header)); 
     }
 
     //Write/create file
@@ -191,12 +192,12 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 if(fileExists == true)
                 {
                     char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
-                    write(client_fd, http_header, sizeof http_header);      
+                    write(client_fd, http_header, strlen(http_header));      
                 }
                 else
                 {
                     char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
-                    write(client_fd, http_header, sizeof http_header); 
+                    write(client_fd, http_header, strlen(http_header)); 
                 }
                 fileRead = true;
             }
@@ -216,13 +217,13 @@ void handleGET(char fileNameChar[], int client_fd)
     if(access(fileNameChar, F_OK) == -1)
     {
         char msg[46] = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-        write(client_fd, msg, sizeof msg);
+        write(client_fd, msg, strlen(msg));
         return;
     }
     if(access(fileNameChar, R_OK) == -1)
     {
         char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
-        write(client_fd, msg, sizeof msg);
+        write(client_fd, msg, strlen(msg));
         return;
     }
 
@@ -298,7 +299,7 @@ int main(int argc, char *argv[])
     }
 
     //Bind address to server
-    if(bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    if(bind(server_fd, (struct sockaddr *)&address, sizeof address) < 0)
     {
         perror("ERROR: Bind failed");
         exit(EXIT_FAILURE);
@@ -329,7 +330,7 @@ int main(int argc, char *argv[])
         if(isCorrectFileName(fileName) == false)
         {
             char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
-            write(client_fd, msg, sizeof msg);
+            write(client_fd, msg, strlen(msg));
             close(client_fd);
             continue;
         }
@@ -340,7 +341,7 @@ int main(int argc, char *argv[])
         if(strstr(header.c_str(), "PUT") == nullptr && strstr(header.c_str(), "GET") == nullptr)
         {
             char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-            write(client_fd, msg, sizeof msg);
+            write(client_fd, msg, strlen(msg));
             close(client_fd);
             continue;
         }
