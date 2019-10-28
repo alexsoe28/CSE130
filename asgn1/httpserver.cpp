@@ -34,7 +34,7 @@ std::string readHeader(int fd)
         p = p + n;
 
         //Checks if we are at the end of the header
-        if(strstr(buffer, "\n\r") != nullptr)
+        if(strstr(buffer, "\r\n\r\n") != nullptr)
         {
             break;
         }
@@ -45,13 +45,12 @@ std::string readHeader(int fd)
             break;
         }
     }
-    //printf("%zd\n", len);
     //Initialize the pointer to the end of our new string with the Null character
     *p = '\0';
     if(n < 0)
     {
-        perror("ERROR: Can't read Client Header");
-        exit(EXIT_FAILURE);
+        close(fd);
+        return std::string(buffer);
     }
     if (len == 0)
     {
@@ -207,21 +206,11 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
 }
 
-/*
-void handle(int client_fd)
-{
-    while(readHeader(client_fd))
-    {
-        
-    }
-}
-*/
-
 //Handles GET requests
 void handleGET(char fileNameChar[], int client_fd)
 {
     char fileContents[buffSize];
-    int file = 1;
+    int fileInBytes = 1;
 
     //Check if the file exists
     if(access(fileNameChar, F_OK) == -1)
@@ -246,14 +235,60 @@ void handleGET(char fileNameChar[], int client_fd)
     
     //Print to client
     int newfd = open(fileNameChar, O_RDONLY);
-    while(file != 0)
+    while(fileInBytes != 0)
     {
         memset(fileContents, 0, buffSize);
-        file = read(newfd, fileContents, buffSize);
+        fileInBytes = read(newfd, fileContents, buffSize);
         write(client_fd, fileContents, buffSize);
     }
-    close(file);
+    close(fileInBytes);
 }
+
+void handle(int client_fd)
+{
+    std::string header = readHeader(client_fd);
+    while(!header.empty())
+    {
+        ssize_t contLength = getContentLength(header);
+        std::string fileName = getFileName(header);
+
+        //Turn C++ String to C-String
+        char fileNameChar[fileSize];
+        strcpy(fileNameChar, fileName.c_str());
+        
+        //Respond to a PUT command
+        if(strstr(header.c_str(), "PUT") == nullptr && strstr(header.c_str(), "GET") == nullptr)
+        {
+            char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+            write(client_fd, msg, strlen(msg));
+            close(client_fd);
+            continue;
+        }
+
+        //Check if valid fileName
+        if(isCorrectFileName(fileName) == false)
+        {
+            char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
+            write(client_fd, msg, strlen(msg));
+            close(client_fd);
+            continue;
+        }
+        //Respond to PUT
+        if(strstr(header.c_str(), "PUT") != nullptr)
+        {   
+            handlePUT(fileNameChar, contLength, client_fd);
+        }
+        
+        //Respond to GET
+        if(strstr(header.c_str(), "GET") != nullptr)
+        {
+            handleGET(fileNameChar, client_fd);
+        }
+        //Retrieve Header, file name, and content length
+        header = readHeader(client_fd); 
+    }   
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -330,45 +365,9 @@ int main(int argc, char *argv[])
             perror("ERROR: Could not accept socket");
             exit(EXIT_FAILURE);
         }
-
-        //Retrieve Header, file name, and content length
-        std::string header = readHeader(client_fd); 
-        ssize_t contLength = getContentLength(header);
-        std::string fileName = getFileName(header);
-        
-        //Check if valid fileName
-        if(isCorrectFileName(fileName) == false)
-        {
-            char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
-            write(client_fd, msg, strlen(msg));
-            close(client_fd);
-            continue;
-        }
-        char fileNameChar[fileSize];
-        strcpy(fileNameChar, fileName.c_str());
-
-        //Respond to a PUT command
-        if(strstr(header.c_str(), "PUT") == nullptr && strstr(header.c_str(), "GET") == nullptr)
-        {
-            char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-            write(client_fd, msg, strlen(msg));
-            close(client_fd);
-            continue;
-        }
-
-        if(strstr(header.c_str(), "PUT") != nullptr)
-        {   
-            handlePUT(fileNameChar, contLength, client_fd);
-        }
-        //printf("got here\n");
-        if(strstr(header.c_str(), "GET") != nullptr)
-        {
-            handleGET(fileNameChar, client_fd);
-        }
-        close(client_fd);
-        //printf("got to the end of this thing\n");
-    }   
-    close(server_fd);
+        handle(client_fd);
+    }
+    
     return 0;
 }
 
