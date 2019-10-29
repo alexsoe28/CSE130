@@ -70,8 +70,6 @@ ssize_t getContentLength(std::string Header)
         int contentLength = sscanf(cl, "Content-Length: %zd", &length);
         if(contentLength > 0)
         {
-			printf("%zd", length);
-			fflush(stdout);
             return length;
         }
         else
