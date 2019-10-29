@@ -70,6 +70,8 @@ ssize_t getContentLength(std::string Header)
         int contentLength = sscanf(cl, "Content-Length: %zd", &length);
         if(contentLength > 0)
         {
+			printf("%zd", length);
+			fflush(stdout);
             return length;
         }
         else
@@ -133,6 +135,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     bool ContentLength = false;
     bool fileRead = false;
 
+	printf("%zd", contLength);
+	fflush(stdout);
     if(contLength != -1)
     {
         ContentLength = true;
@@ -168,16 +172,17 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         {
             if((size_t)contLength <= buffSize)
             {
-                read(client_fd, fileContents, contLength);
-                write(newfd, fileContents, contLength);
-                break;
+                ssize_t readSize = read(client_fd, fileContents, contLength);
+                write(newfd, fileContents, readSize);
+				contLength = contLength - readSize;
+				continue;
             }
-            read(client_fd, fileContents, buffSize);
-            write(newfd, fileContents, buffSize);
+            ssize_t readSize = read(client_fd, fileContents, buffSize);
+            write(newfd, fileContents, readSize);
             contLength = contLength - buffSize; 
         }
         close(newfd);
-        }
+    }
     else
     {
         //If there is no content length print until eof
@@ -239,7 +244,7 @@ void handleGET(char fileNameChar[], int client_fd)
     {
         memset(fileContents, 0, buffSize);
         fileInBytes = read(newfd, fileContents, buffSize);
-        write(client_fd, fileContents, buffSize);
+        write(client_fd, fileContents, fileInBytes);
     }
     close(fileInBytes);
 }
@@ -286,6 +291,7 @@ void handle(int client_fd)
         }
         //Retrieve Header, file name, and content length
         header = readHeader(client_fd); 
+		
     }   
 }
 
