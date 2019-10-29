@@ -133,8 +133,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     bool ContentLength = false;
     bool fileRead = false;
 
-	printf("%zd", contLength);
-	fflush(stdout);
     if(contLength != -1)
     {
         ContentLength = true;
