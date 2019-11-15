@@ -295,11 +295,9 @@ void handleClient(int client_fd)
 
 int main(int argc, char *argv[])
 {
-    int server_fd, client_fd, numThreads;
+    int server_fd, client_fd;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-    bool logFile;
-
 
     //Check if the socket is setup succesfully
     if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
@@ -308,79 +306,61 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    //Initialize port and address
+    //Initialize port, address, logfile, and threadcount
     struct hostent *he;
     address.sin_family = AF_INET;
     int user_port;
-    if(argc == 1 || argc > 7)
-    {
-        perror("Usage: ./httpserver [address] [PORT]");
-        exit(EXIT_FAILURE);
-    }
+    int opt;
+    char *logFileName = nullptr;
+    int numThreads;
 
-    for(int i = 1; i < argc; i++)
-    {
-        if(strncmp(argv[i], "-N", 1) == 0)
-        {
-            if(sscanf(argv[i + 1], "%d", &numThreads) == -1)
-            {
-                perror("Usage: -N [Number of Threads]");
-                exit(EXIT_FAILURE);
-            }
-            printf("Number of threads = %d", numThreads);
-        }
-        else if(strncmp(argv[i], "-l", 1) == 0)
-        {
-            logFile = true;
-        }
-        else
-        {
-            if((he = gethostbyname(argv[i])) == nullptr) {
-                perror("ERROR: Invalid host name or ip");
-                exit(EXIT_FAILURE);
-            }
-            if(argv[i + 1] != nullptr){
-                if(sscanf(argv[i + 1], "%d", &user_port) != -1)
-                {
-                    address.sin_port = htons(user_port);
-                }
-            }
-            else
-            {
-                address.sin_port = htons(PORT);
-            }
-            memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
-            break;
-        }
-    }
-    /*
     if(argc == 1)
     {
         perror("Usage: ./httpserver [address] [PORT]");
         exit(EXIT_FAILURE);
     }
-    else if (argc == 2)
+
+    while((opt = getopt (argc, argv, ":l:N:")) != -1)
     {
-        if ( (he = gethostbyname(argv[1]) ) == NULL ) {
-            exit(EXIT_FAILURE);
+        switch(opt)
+        {
+            case 'l':
+                logFileName = optarg;
+                break;
+
+            case 'N':
+                numThreads = atoi(optarg);
+                break;
+            case '?':
+                fprintf(stderr, "ERROR: Unknown option %c\n", optopt);
+                exit(EXIT_FAILURE);
+            case ':':
+                fprintf(stderr, "ERROR: %c requires an argument\n", optopt);
+                exit(EXIT_FAILURE);
         }
-        address.sin_port = htons(PORT);
-        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);       
     }
-    else if(sscanf(argv[2], "%d", &user_port) != -1)
+
+    if((he = gethostbyname(argv[optind])) == nullptr)
     {
-        if ( (he = gethostbyname(argv[1]) ) == NULL ) {
-            exit(EXIT_FAILURE);
-        }
-        address.sin_port = htons(user_port);
-        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
-    } 
-    else
-    {
-        perror("ERROR: Invalid format for httpserver");
+        perror("ERROR: Invalid host name or ip");
         exit(EXIT_FAILURE);
     }
-    */
+    else
+    {
+        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
+    }
+    if(argv[optind + 1] != nullptr)
+    {
+        if(sscanf(argv[optind + 1], "%d", &user_port) != -1)
+        {
+            address.sin_port = htons(user_port);
+        }
+        else
+        {
+            address.sin_port = htons(PORT);
+        }
+    }    
+
     //Bind address to server
     if(bind(server_fd, (struct sockaddr *)&address, sizeof address) < 0)
     {
