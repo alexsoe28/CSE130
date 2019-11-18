@@ -15,10 +15,19 @@
 #include <netdb.h>
 #include <sys/select.h>
 #include <string.h>
+#include <deque>
+#include <pthread.h>
 #define PORT 80
 
 const size_t buffSize = 4097;
 const size_t fileSize = 27;
+
+struct context{
+    pthread_cond_t cond;
+    pthread_mutex_t lock;
+    std::deque<int> clientQueue;
+};
+
 //Function for returning the header as string
 std::string readHeader(int fd)
 {
@@ -55,6 +64,7 @@ std::string readHeader(int fd)
     }
     if (len == 0)
     {
+        std::cerr << "Failed on fd = " << fd << " n = " << n << "\n";
         perror("ERROR: Exceeded max header size");
         exit(EXIT_FAILURE);
     }
@@ -163,7 +173,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 
     //Write/create file
     if(contLength != -1)
-    {    
+    {   
         int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
         while(contLength > 0)
         {
@@ -176,7 +186,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             }
             ssize_t readSize = read(client_fd, fileContents, buffSize);
             write(newfd, fileContents, readSize);
-            contLength = contLength - buffSize; 
+            contLength = contLength - buffSize;
         }
         close(newfd);
     }
@@ -286,19 +296,41 @@ void handleClient(int client_fd)
         {
             handleGET(fileNameChar, client_fd);
         }
-        //Retrieve Header, file name, and content length
-        header = readHeader(client_fd); 
-		
-    }   
+        header = readHeader(client_fd);
+    }  
 }
 
+void * workerFunction(void* arg)
+{
+    context* c = (context*)arg;
+    while(true)
+    {
+        pthread_mutex_lock(&(c->lock));
+        while(c->clientQueue.empty())
+        {
+            pthread_cond_wait(&(c->cond), &(c->lock));
+        }
+        int client_fd = c->clientQueue.front();
+        c->clientQueue.pop_front();
+        pthread_mutex_unlock(&(c->lock));
+        std::cerr << "working on " << client_fd << "\n";
+        handleClient(client_fd);
+    }
+    return NULL; 
+}
 
 int main(int argc, char *argv[])
 {
     int server_fd, client_fd;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-
+    
+    //Initialize Mutexes and condition variables
+    pthread_t workers;
+    context c;
+    c.cond = PTHREAD_COND_INITIALIZER;
+    c.lock = PTHREAD_MUTEX_INITIALIZER;
+    
     //Check if the socket is setup succesfully
     if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
@@ -312,9 +344,9 @@ int main(int argc, char *argv[])
     int user_port;
     int opt;
     char *logFileName = nullptr;
-    int numThreads;
+    size_t numThreads = 4;
 
-    if(argc == 1)
+    if(argc == 1 || argc > 7)
     {
         perror("Usage: ./httpserver [address] [PORT]");
         exit(EXIT_FAILURE);
@@ -329,7 +361,11 @@ int main(int argc, char *argv[])
                 break;
 
             case 'N':
-                numThreads = atoi(optarg);
+                if(sscanf(optarg, "%zd", &numThreads) == 0)
+                {
+                    fprintf(stderr, "ERROR: %c requires an integer argument \n", optopt);
+                    exit(EXIT_FAILURE);
+                }
                 break;
             case '?':
                 fprintf(stderr, "ERROR: Unknown option %c\n", optopt);
@@ -340,15 +376,23 @@ int main(int argc, char *argv[])
         }
     }
 
-    if((he = gethostbyname(argv[optind])) == nullptr)
-    {
-        perror("ERROR: Invalid host name or ip");
-        exit(EXIT_FAILURE);
+    if(argv[optind] != nullptr){
+        if((he = gethostbyname(argv[optind])) == nullptr)
+        {
+            perror("ERROR: Invalid host name or ip");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
+        }
     }
     else
     {
-        memcpy(&address.sin_addr, he->h_addr_list[0], he->h_length);
+        perror("ERROR: httpserver requires an address name/ip");
+        exit(EXIT_FAILURE);
     }
+
     if(argv[optind + 1] != nullptr)
     {
         if(sscanf(argv[optind + 1], "%d", &user_port) != -1)
@@ -360,6 +404,12 @@ int main(int argc, char *argv[])
             address.sin_port = htons(PORT);
         }
     }    
+
+    //Initialize threads;
+    for(size_t i = 0; i < numThreads; i++)
+    {
+        pthread_create(&workers, NULL, workerFunction, (void*)&c);
+    }
 
     //Bind address to server
     if(bind(server_fd, (struct sockaddr *)&address, sizeof address) < 0)
@@ -374,18 +424,21 @@ int main(int argc, char *argv[])
         perror("ERROR: Listen failed");
         exit(EXIT_FAILURE);
     }
-
-    //Respond to get and put requests
-    while(1)
-    {
-        if((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
-        {
-            perror("ERROR: Could not accept socket");
-            exit(EXIT_FAILURE);
-        }
-        handleClient(client_fd);
-    }
     
+    printf("There are %zd threads\n", numThreads);
+    //Respond to get and put requests
+    while(true)
+    {
+
+        while((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) > 0)
+        {
+            pthread_mutex_lock(&(c.lock));
+            std::cerr << "Adding fd " << client_fd << "\n";
+            c.clientQueue.push_back(client_fd);
+            pthread_cond_signal(&(c.cond));
+            pthread_mutex_unlock(&(c.lock));
+        }
+    }
     return 0;
 }
 
