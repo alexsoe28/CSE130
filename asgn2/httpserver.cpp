@@ -21,12 +21,29 @@
 
 const size_t buffSize = 4097;
 const size_t fileSize = 27;
+int logFd;
+size_t offSet;
 
 struct context{
     pthread_cond_t cond;
     pthread_mutex_t lock;
     std::deque<int> clientQueue;
 };
+
+size_t getOffSet(size_t logLength)
+{
+    
+}
+
+void printGETLog(char fileNameChar[])
+{    
+    char get[50];
+    strcpy(get, "GET ");
+    strcat(get, fileNameChar);
+    strcat(get, " length 0\n========\n");
+    size_t logOffSet = getOffSet((size_t)strlen(get));
+    pwrite(logFd, get, strlen(get), logOffSet);
+}
 
 //Function for returning the header as string
 std::string readHeader(int fd)
@@ -37,8 +54,8 @@ std::string readHeader(int fd)
     ssize_t n;
     p = buffer;
 
-    //While the we can read from the client socket
-    while((n = read(fd, p, len)) > 0)
+    //While the we can read from the client socket   
+    while((n = recv(fd, p, 1, 0)) > 0)
     {
         len = len - n;
         p = p + n;
@@ -55,11 +72,11 @@ std::string readHeader(int fd)
             break;
         }
     }
+    printf("The fd = %zd and the content is %s\n\n", n, buffer);
     //Initialize the pointer to the end of our new string with the Null character
     *p = '\0';
-    if(n < 0)
+    if(n <= 0)
     {
-        close(fd);
         return std::string(buffer);
     }
     if (len == 0)
@@ -174,17 +191,32 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     //Write/create file
     if(contLength != -1)
     {   
-        int newfd = open(fileNameChar, O_CREAT | O_WRONLY | O_TRUNC, 0777);
+        int newfd = open(fileNameChar, O_CREAT | O_RDWR | O_TRUNC, 0777);
         while(contLength > 0)
         {
             if((size_t)contLength <= buffSize)
             {
-                ssize_t readSize = read(client_fd, fileContents, contLength);
+                int readSize = recv(client_fd, fileContents, contLength, 0);
+                printf("readSize = %d\n", readSize);
+                if(readSize == 0)
+                {
+                    char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+                    write(client_fd, msg, strlen(msg));
+                    close(client_fd);
+                    return;
+                }
                 write(newfd, fileContents, readSize);
 				contLength = contLength - readSize;
 				continue;
             }
-            ssize_t readSize = read(client_fd, fileContents, buffSize);
+            int readSize = recv(client_fd, fileContents, buffSize, 0);
+            if(readSize == 0)
+            {
+                char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+                write(client_fd, msg, strlen(msg));
+                close(client_fd);
+                return;
+            }
             write(newfd, fileContents, readSize);
             contLength = contLength - buffSize;
         }
@@ -197,7 +229,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         while(fileInBytes != 0)
         {
             memset(fileContents, 0, buffSize);
-            fileInBytes = read(client_fd, fileContents, buffSize);
+            fileInBytes = recv(client_fd, fileContents, buffSize, 0);
             if(fileRead == false)
             {
                 if(fileExists == true)
@@ -253,7 +285,10 @@ void handleGET(char fileNameChar[], int client_fd)
         fileInBytes = read(newfd, fileContents, buffSize);
         write(client_fd, fileContents, fileInBytes);
     }
-    close(fileInBytes);
+
+    printGETLog(fileNameChar);
+    close(newfd);
+
 }
 
 void handleClient(int client_fd)
@@ -290,14 +325,15 @@ void handleClient(int client_fd)
         {   
             handlePUT(fileNameChar, contLength, client_fd);
         }
-        
         //Respond to GET
         if(strstr(header.c_str(), "GET") != nullptr)
         {
             handleGET(fileNameChar, client_fd);
         }
+        printf("Reading next header\n");
         header = readHeader(client_fd);
-    }  
+    }
+    close(client_fd);
 }
 
 void * workerFunction(void* arg)
@@ -358,6 +394,7 @@ int main(int argc, char *argv[])
         {
             case 'l':
                 logFileName = optarg;
+                
                 break;
 
             case 'N':
@@ -405,6 +442,12 @@ int main(int argc, char *argv[])
         }
     }    
 
+    //Initialize logfile 
+    if(logFileName != nullptr)
+    {
+        logFd = open(logFileName, O_CREAT | O_WRONLY | O_TRUNC, 0777);
+    }
+
     //Initialize threads;
     for(size_t i = 0; i < numThreads; i++)
     {
@@ -429,7 +472,6 @@ int main(int argc, char *argv[])
     //Respond to get and put requests
     while(true)
     {
-
         while((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) > 0)
         {
             pthread_mutex_lock(&(c.lock));
