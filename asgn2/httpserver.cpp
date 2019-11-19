@@ -22,7 +22,8 @@
 const size_t buffSize = 4097;
 const size_t fileSize = 27;
 int logFd;
-size_t offSet;
+size_t offSet = 0;
+pthread_mutex_t offSetLock;
 
 struct context{
     pthread_cond_t cond;
@@ -32,7 +33,15 @@ struct context{
 
 size_t getOffSet(size_t logLength)
 {
+    offSetLock = PTHREAD_MUTEX_INITIALIZER;
     
+    pthread_mutex_lock(&(offSetLock));
+    size_t currLogPos = offSet;
+    offSet += logLength;
+    pthread_mutex_unlock(&(offSetLock));
+   
+    printf("Current Log Position is %zd\n", currLogPos);
+    return currLogPos;
 }
 
 void printGETLog(char fileNameChar[])
@@ -72,11 +81,12 @@ std::string readHeader(int fd)
             break;
         }
     }
-    printf("The fd = %zd and the content is %s\n\n", n, buffer);
+    //printf("The fd = %zd and the content is %s\n\n", n, buffer);
     //Initialize the pointer to the end of our new string with the Null character
     *p = '\0';
     if(n <= 0)
     {
+        printf("Hey the recv returned 0\n");
         return std::string(buffer);
     }
     if (len == 0)
@@ -177,16 +187,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         }
 
     }
-    if(fileExists == true && ContentLength == true)
-    {
-        char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n"; 
-        write(client_fd, http_header, strlen(http_header));      
-    }
-    if(fileExists == false && ContentLength == true)
-    {
-        char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n"; 
-        write(client_fd, http_header, strlen(http_header)); 
-    }
 
     //Write/create file
     if(contLength != -1)
@@ -218,7 +218,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 return;
             }
             write(newfd, fileContents, readSize);
-            contLength = contLength - buffSize;
+            contLength = contLength - readSize;
         }
         close(newfd);
     }
@@ -247,6 +247,16 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             write(newfd, fileContents, fileInBytes);
         }
         close(newfd);
+    }
+    if(fileExists == true && ContentLength == true)
+    {
+        char http_header[39] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
+        write(client_fd, http_header, strlen(http_header));      
+    }
+    if(fileExists == false && ContentLength == true)
+    {
+        char http_header[44] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
+        write(client_fd, http_header, strlen(http_header)); 
     }
 }
 
@@ -286,6 +296,7 @@ void handleGET(char fileNameChar[], int client_fd)
         write(client_fd, fileContents, fileInBytes);
     }
 
+    printf("Printing Get to Logfile\n");
     printGETLog(fileNameChar);
     close(newfd);
 
@@ -332,7 +343,9 @@ void handleClient(int client_fd)
         }
         printf("Reading next header\n");
         header = readHeader(client_fd);
+        
     }
+    printf("Done with Client!\n");
     close(client_fd);
 }
 
