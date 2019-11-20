@@ -70,7 +70,7 @@ void printErrorLog(char fileNameChar[], char command[], std::string response)
 //Function for returning the header as string
 std::string readHeader(int fd)
 {
-    char buffer[buffSize];
+    char buffer[buffSize] = {0};
     char *p;
     size_t len = buffSize - 1;
     ssize_t n;
@@ -166,7 +166,7 @@ std::string getFileName(std::string header)
     //Use string stream to extract tokens
     std::vector <std::string> tokenVector;
     std::istringstream tokStream(header);
-    std::string token;
+    std::string token = "";
     while(std::getline(tokStream, token, ' '))
     {
         tokenVector.push_back(token);
