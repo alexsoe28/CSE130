@@ -23,6 +23,7 @@ const size_t buffSize = 4097;
 const size_t fileSize = 27;
 int logFd;
 size_t offSet = 0;
+bool logFileExists = false;
 pthread_mutex_t offSetLock;
 
 struct context{
@@ -278,15 +279,15 @@ void handleGET(char fileNameChar[], int client_fd)
         char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, strlen(msg));
         return;
-    }
-
+    } 
+    
     //Print out content length with header
     struct stat statVal;
     stat(fileNameChar, &statVal);
     off_t contentLength = statVal.st_size;
     std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\r\n\r\n";
     write(client_fd, clientHeader.c_str(), clientHeader.length());
-    
+
     //Print to client
     int newfd = open(fileNameChar, O_RDONLY);
     while(fileInBytes != 0)
@@ -295,9 +296,10 @@ void handleGET(char fileNameChar[], int client_fd)
         fileInBytes = read(newfd, fileContents, buffSize);
         write(client_fd, fileContents, fileInBytes);
     }
-
-    printf("Printing Get to Logfile\n");
-    printGETLog(fileNameChar);
+    if(logFileExists == true){
+        printf("Printing Get to Logfile\n");
+        printGETLog(fileNameChar);
+    }
     close(newfd);
 
 }
@@ -407,7 +409,7 @@ int main(int argc, char *argv[])
         {
             case 'l':
                 logFileName = optarg;
-                
+                logFileExists = true;
                 break;
 
             case 'N':
@@ -456,8 +458,9 @@ int main(int argc, char *argv[])
     }    
 
     //Initialize logfile 
-    if(logFileName != nullptr)
+    if(logFileExists == true)
     {
+        printf("Log File exists!\n");
         logFd = open(logFileName, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     }
 
