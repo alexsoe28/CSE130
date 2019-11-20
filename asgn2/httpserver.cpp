@@ -55,6 +55,18 @@ void printGETLog(char fileNameChar[])
     pwrite(logFd, get, strlen(get), logOffSet);
 }
 
+void printErrorLog(char fileNameChar[], char command[], std::string response)
+{
+    std::string fileNameString(fileNameChar);
+    std::string commandString(command);
+    std::string errorLog;
+    
+    errorLog = "FAIL: " + commandString + " " + fileNameString 
+        + " HTTP/1.1 --- response " + response +"\n========\n";
+    size_t logOffSet = getOffSet((size_t)errorLog.length());
+    pwrite(logFd, errorLog.c_str(), errorLog.length(), logOffSet);   
+}
+
 //Function for returning the header as string
 std::string readHeader(int fd)
 {
@@ -167,6 +179,8 @@ std::string getFileName(std::string header)
 void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
     char fileContents[buffSize];
+    char put[4] = "PUT";
+    std::string response;
     int fileInBytes = 1;
     bool fileExists = false;
     bool ContentLength = false;
@@ -184,6 +198,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         {
             char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
             write(client_fd, msg, strlen(msg));
+            response = "403";
+            printErrorLog(fileNameChar, put, response);
             return;
         }
 
@@ -203,6 +219,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 {
                     char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
                     write(client_fd, msg, strlen(msg));
+                    response = "500";
+                    printErrorLog(fileNameChar, put, response);
                     close(client_fd);
                     return;
                 }
@@ -215,6 +233,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             {
                 char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
                 write(client_fd, msg, strlen(msg));
+                response = "500";
+                printErrorLog(fileNameChar, put, response);
                 close(client_fd);
                 return;
             }
@@ -264,20 +284,28 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 //Handles GET requests
 void handleGET(char fileNameChar[], int client_fd)
 {
+    printf("We are in the Get function\n");
+    std::fflush(stdout);
     char fileContents[buffSize];
+    std::string response;
+    char get[4] = "GET";
     int fileInBytes = 1;
-
+    
     //Check if the file exists
     if(access(fileNameChar, F_OK) == -1)
     {
         char msg[46] = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, strlen(msg));
+        response = "404";
+        printErrorLog(fileNameChar, get, response);
         return;
     }
     if(access(fileNameChar, R_OK) == -1)
     {
         char msg[46] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, strlen(msg));
+        response = "403";
+        printErrorLog(fileNameChar, get, response);
         return;
     } 
     
@@ -306,7 +334,8 @@ void handleGET(char fileNameChar[], int client_fd)
 
 void handleClient(int client_fd)
 {
-    std::string header = readHeader(client_fd);
+    std::string header = readHeader(client_fd); 
+    std::string response;
     while(!header.empty())
     {
         ssize_t contLength = getContentLength(header);
@@ -325,23 +354,36 @@ void handleClient(int client_fd)
             continue;
         }
 
-        //Check if valid fileName
-        if(isCorrectFileName(fileName) == false)
-        {
-            char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
-            write(client_fd, msg, strlen(msg));
-            close(client_fd);
-            continue;
-        }
         //Respond to PUT
         if(strstr(header.c_str(), "PUT") != nullptr)
         {   
-            handlePUT(fileNameChar, contLength, client_fd);
+            if(isCorrectFileName(fileName) == false)
+            {
+                char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
+                write(client_fd, msg, strlen(msg));
+                response = "400";
+                char put[4] = "PUT";
+                printErrorLog(fileNameChar, put, response);
+            }
+            else
+            {
+                handlePUT(fileNameChar, contLength, client_fd);
+            }
         }
         //Respond to GET
         if(strstr(header.c_str(), "GET") != nullptr)
         {
-            handleGET(fileNameChar, client_fd);
+            if(isCorrectFileName(fileName) == false)
+            {
+                char msg[39] = "HTTP/1.1 400 Internal Server Error\r\n\r\n";
+                write(client_fd, msg, strlen(msg));
+                response = "400";
+                char get[4] = "GET";
+                printErrorLog(fileNameChar, get, response);
+            }
+            else{
+                handleGET(fileNameChar, client_fd);
+            }
         }
         printf("Reading next header\n");
         header = readHeader(client_fd);
