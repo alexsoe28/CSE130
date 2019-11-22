@@ -47,6 +47,10 @@ size_t getOffSet(size_t logLength)
 
 size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
 {
+    if(logFileExists == false)
+    {
+        return 0;
+    }
     std::string endMessage = "========\n";
     std::string contLenString = std::to_string((int)contLength);
     std::string fileNameString = fileNameChar;
@@ -84,6 +88,10 @@ std::string convertLineNumber(size_t totalReadSize)
 
 size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], size_t startPosition, bool last)
 {
+    if(logFileExists == false)
+    {
+        return 0;
+    }
     size_t newPosition = startPosition;
     for(size_t i = 0; i < readSize; i++)
     {
@@ -114,7 +122,11 @@ size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], s
 }
 
 void printGETLog(char fileNameChar[])
-{    
+{   
+    if(logFileExists == false)
+    {
+        return;
+    }
     char get[50] = {0};
     strcpy(get, "GET ");
     strcat(get, fileNameChar);
@@ -125,6 +137,10 @@ void printGETLog(char fileNameChar[])
 
 void printErrorLog(char fileNameChar[], char command[], std::string response)
 {
+    if(logFileExists == false)
+    {
+        return;
+    }
     std::string fileNameString(fileNameChar);
     std::string commandString(command);
     std::string errorLog;
