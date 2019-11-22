@@ -52,9 +52,9 @@ size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
     std::string fileNameString = fileNameChar;
     std::string putLog = "PUT " + fileNameString + " length " + contLenString + "\n";
    
-    int ceilNumber = (ceil((double)contLength/20.0));
+    int numLines = (ceil((double)contLength/20.0));
 
-    size_t putOffSet = putLog.length() + (9 * ceilNumber) + 
+    size_t putOffSet = putLog.length() + (9 * numLines) + 
                        (3 * contLength) + 9;
     
     size_t startPosition = getOffSet(putOffSet);
@@ -170,7 +170,6 @@ std::string readHeader(int fd)
     }
     if (len == 0)
     {
-        std::cerr << "Failed on fd = " << fd << " n = " << n << "\n";
         perror("ERROR: Exceeded max header size");
         exit(EXIT_FAILURE);
     }
@@ -473,7 +472,6 @@ void * workerFunction(void* arg)
         int client_fd = c->clientQueue.front();
         c->clientQueue.pop_front();
         pthread_mutex_unlock(&(c->lock));
-        std::cerr << "working on " << client_fd << "\n";
         handleClient(client_fd);
     }
     return NULL; 
@@ -598,7 +596,6 @@ int main(int argc, char *argv[])
         while((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) > 0)
         {
             pthread_mutex_lock(&(c.lock));
-            std::cerr << "Adding fd " << client_fd << "\n";
             c.clientQueue.push_back(client_fd);
             pthread_cond_signal(&(c.cond));
             pthread_mutex_unlock(&(c.lock));
