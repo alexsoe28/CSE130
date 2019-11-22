@@ -51,14 +51,18 @@ size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
     std::string contLenString = std::to_string((int)contLength);
     std::string fileNameString = fileNameChar;
     std::string putLog = "PUT " + fileNameString + " length " + contLenString + "\n";
-    size_t putOffSet = putLog.length() + (9 * ((size_t)ceil((double)contLength)/20.0)) + 
+   
+    int ceilNumber = (ceil((double)contLength/20.0));
+
+    size_t putOffSet = putLog.length() + (9 * ceilNumber) + 
                        (3 * contLength) + 9;
+    
     size_t startPosition = getOffSet(putOffSet);
     pwrite(logFd, putLog.c_str(), putLog.length(), startPosition);
+    
     size_t endMsgOffSet = startPosition + putOffSet - 9;
     pwrite(logFd, endMessage.c_str(), endMessage.length(), endMsgOffSet);
     startPosition += (size_t)putLog.length();
-    printf("The offset is %zd\n", startPosition);
     return startPosition;
 }
 
@@ -67,31 +71,44 @@ std::string convertCharToHex(char c)
     char hex[3];
     sprintf(hex, " %02X", c);
     std::string hexString = hex;
-    return hex;
+    return hexString;
 }
 
-std::string convertLineNumber(size_t lineNumber)
+std::string convertLineNumber(size_t totalReadSize)
 {
     char buffer[9];
-    sprintf(buffer, "%08zd", lineNumber);
+    sprintf(buffer, "%08zd", totalReadSize);
     std::string lineNumString = buffer;
     return lineNumString;
 }
 
-size_t printPUTLog(size_t readSize, ssize_t contLength, char fileContents[], size_t startPosition)
+size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], size_t startPosition, bool last)
 {
-    
-    size_t lineNumber = 0;
     size_t newPosition = startPosition;
-    
-    std::string lineNumString = convertLineNumber(lineNumber);
-    pwrite(logFd, lineNumString.c_str(), lineNumString.length(), startPosition);
-    newPosition += lineNumString.length();
     for(size_t i = 0; i < readSize; i++)
     {
+        if(totalReadSize % 20 == 0)
+        {
+            std::string lineNumString = convertLineNumber(totalReadSize);
+            pwrite(logFd, lineNumString.c_str(), lineNumString.length(), newPosition);
+            newPosition += lineNumString.length();
+        }
         std::string hexData = convertCharToHex(fileContents[i]);
         pwrite(logFd, hexData.c_str(), hexData.length(), newPosition);
         newPosition += hexData.length();
+        if(totalReadSize % 20 == 19)
+        {
+            char newLine[] = "\n";
+            pwrite(logFd, newLine, 1, newPosition);
+            newPosition++;
+        }
+        totalReadSize++;
+    }
+    if(last == true && totalReadSize % 20 != 0)
+    {
+        char newLine[] = "\n";
+        pwrite(logFd, newLine, 1, newPosition);
+        newPosition++;
     }
     return newPosition;
 }
@@ -145,7 +162,6 @@ std::string readHeader(int fd)
             break;
         }
     }
-    //printf("The fd = %zd and the content is %s\n\n", n, buffer);
     //Initialize the pointer to the end of our new string with the Null character
     *p = '\0';
     if(n <= 0)
@@ -236,6 +252,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     bool ContentLength = false;
     bool fileRead = false;
     size_t startPosition;
+    size_t totalReadSize = 0;
 
     if(contLength != -1)
     {
@@ -275,7 +292,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                     close(client_fd);
                     return;
                 }
-                startPosition = printPUTLog(readSize, contLength, fileContents, startPosition);
+                printPUTLog(totalReadSize, readSize, fileContents, startPosition, true);
                 write(newfd, fileContents, readSize);
 				contLength = contLength - readSize;
 				continue;
@@ -290,7 +307,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 close(client_fd);
                 return;
             }
-            printPUTLog(readSize, contLength, fileContents, startPosition);
+            startPosition = printPUTLog(totalReadSize, readSize, fileContents, startPosition, false);
+            totalReadSize += readSize;
             write(newfd, fileContents, readSize);
             contLength = contLength - readSize;
         }
@@ -318,7 +336,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 }
                 fileRead = true;
             }
-            printPUTLog(fileInBytes, contLength, fileContents, startPosition);
+            printPUTLog(fileInBytes, contLength, fileContents, startPosition, false);
             write(newfd, fileContents, fileInBytes);
         }
         close(newfd);
@@ -377,7 +395,6 @@ void handleGET(char fileNameChar[], int client_fd)
         write(client_fd, fileContents, fileInBytes);
     }
     if(logFileExists == true){
-        printf("Printing Get to Logfile\n");
         printGETLog(fileNameChar);
     }
     close(newfd);
@@ -437,11 +454,9 @@ void handleClient(int client_fd)
                 handleGET(fileNameChar, client_fd);
             }
         }
-        printf("Reading next header\n");
         header = readHeader(client_fd);
         
     }
-    printf("Done with Client!\n");
     close(client_fd);
 }
 
@@ -554,7 +569,6 @@ int main(int argc, char *argv[])
     //Initialize logfile 
     if(logFileExists == true)
     {
-        printf("Log File exists!\n");
         logFd = open(logFileName, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     }
 
@@ -578,7 +592,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     
-    printf("There are %zd threads\n", numThreads);
     //Respond to get and put requests
     while(true)
     {
