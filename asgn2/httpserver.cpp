@@ -17,6 +17,7 @@
 #include <string.h>
 #include <deque>
 #include <pthread.h>
+#include <math.h>
 #define PORT 80
 
 const size_t buffSize = 4097;
@@ -41,13 +42,63 @@ size_t getOffSet(size_t logLength)
     offSet += logLength;
     pthread_mutex_unlock(&(offSetLock));
    
-    printf("Current Log Position is %zd\n", currLogPos);
     return currLogPos;
+}
+
+size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
+{
+    std::string endMessage = "========\n";
+    std::string contLenString = std::to_string((int)contLength);
+    std::string fileNameString = fileNameChar;
+    std::string putLog = "PUT " + fileNameString + " length " + contLenString + "\n";
+    size_t putOffSet = putLog.length() + (9 * ((size_t)ceil((double)contLength)/20.0)) + 
+                       (3 * contLength) + 9;
+    size_t startPosition = getOffSet(putOffSet);
+    pwrite(logFd, putLog.c_str(), putLog.length(), startPosition);
+    size_t endMsgOffSet = startPosition + putOffSet - 9;
+    pwrite(logFd, endMessage.c_str(), endMessage.length(), endMsgOffSet);
+    startPosition += (size_t)putLog.length();
+    printf("The offset is %zd\n", startPosition);
+    return startPosition;
+}
+
+std::string convertCharToHex(char c)
+{
+    char hex[3];
+    sprintf(hex, " %02X", c);
+    std::string hexString = hex;
+    return hex;
+}
+
+std::string convertLineNumber(size_t lineNumber)
+{
+    char buffer[9];
+    sprintf(buffer, "%08zd", lineNumber);
+    std::string lineNumString = buffer;
+    return lineNumString;
+}
+
+size_t printPUTLog(size_t readSize, ssize_t contLength, char fileContents[], size_t startPosition)
+{
+    
+    size_t lineNumber = 0;
+    size_t newPosition = startPosition;
+    
+    std::string lineNumString = convertLineNumber(lineNumber);
+    pwrite(logFd, lineNumString.c_str(), lineNumString.length(), startPosition);
+    newPosition += lineNumString.length();
+    for(size_t i = 0; i < readSize; i++)
+    {
+        std::string hexData = convertCharToHex(fileContents[i]);
+        pwrite(logFd, hexData.c_str(), hexData.length(), newPosition);
+        newPosition += hexData.length();
+    }
+    return newPosition;
 }
 
 void printGETLog(char fileNameChar[])
 {    
-    char get[50];
+    char get[50] = {0};
     strcpy(get, "GET ");
     strcat(get, fileNameChar);
     strcat(get, " length 0\n========\n");
@@ -99,7 +150,6 @@ std::string readHeader(int fd)
     *p = '\0';
     if(n <= 0)
     {
-        printf("Hey the recv returned 0\n");
         return std::string(buffer);
     }
     if (len == 0)
@@ -141,7 +191,7 @@ bool isCorrectFileName(std::string fileName)
         return false;
     }
     //Check if fileName has proper characters
-    char fileNameChar[fileSize];
+    char fileNameChar[fileSize] = {0};
     strcpy(fileNameChar, fileName.c_str());
     for(size_t i = 0; i < fileSize; i++)
     {
@@ -178,13 +228,14 @@ std::string getFileName(std::string header)
 //Handles when the client requests a PUT command
 void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 {
-    char fileContents[buffSize];
+    char fileContents[buffSize] ={0};
     char put[4] = "PUT";
-    std::string response;
+    std::string response = "";
     int fileInBytes = 1;
     bool fileExists = false;
     bool ContentLength = false;
     bool fileRead = false;
+    size_t startPosition;
 
     if(contLength != -1)
     {
@@ -204,7 +255,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         }
 
     }
-
+    
+    startPosition = printPUTLogHeader(fileNameChar, contLength);
     //Write/create file
     if(contLength != -1)
     {   
@@ -214,7 +266,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             if((size_t)contLength <= buffSize)
             {
                 int readSize = recv(client_fd, fileContents, contLength, 0);
-                printf("readSize = %d\n", readSize);
                 if(readSize == 0)
                 {
                     char msg[39] = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
@@ -224,6 +275,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                     close(client_fd);
                     return;
                 }
+                startPosition = printPUTLog(readSize, contLength, fileContents, startPosition);
                 write(newfd, fileContents, readSize);
 				contLength = contLength - readSize;
 				continue;
@@ -238,6 +290,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 close(client_fd);
                 return;
             }
+            printPUTLog(readSize, contLength, fileContents, startPosition);
             write(newfd, fileContents, readSize);
             contLength = contLength - readSize;
         }
@@ -265,6 +318,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 }
                 fileRead = true;
             }
+            printPUTLog(fileInBytes, contLength, fileContents, startPosition);
             write(newfd, fileContents, fileInBytes);
         }
         close(newfd);
@@ -284,10 +338,8 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 //Handles GET requests
 void handleGET(char fileNameChar[], int client_fd)
 {
-    printf("We are in the Get function\n");
-    std::fflush(stdout);
-    char fileContents[buffSize];
-    std::string response;
+    char fileContents[buffSize] = {0};
+    std::string response = "";
     char get[4] = "GET";
     int fileInBytes = 1;
     
@@ -335,7 +387,7 @@ void handleGET(char fileNameChar[], int client_fd)
 void handleClient(int client_fd)
 {
     std::string header = readHeader(client_fd); 
-    std::string response;
+    std::string response = "";
     while(!header.empty())
     {
         ssize_t contLength = getContentLength(header);
@@ -445,7 +497,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    while((opt = getopt (argc, argv, ":l:N:")) != -1)
+    while((opt = getopt(argc, argv, ":l:N:")) != -1)
     {
         switch(opt)
         {
@@ -470,7 +522,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if(argv[optind] != nullptr){
+    if(argc - optind >= 1){
         if((he = gethostbyname(argv[optind])) == nullptr)
         {
             perror("ERROR: Invalid host name or ip");
@@ -487,7 +539,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    if(argv[optind + 1] != nullptr)
+    if(argc - optind == 2)
     {
         if(sscanf(argv[optind + 1], "%d", &user_port) != -1)
         {
