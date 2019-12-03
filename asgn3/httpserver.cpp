@@ -47,42 +47,44 @@ void writeFromCache(std::string fileName, std::string fileContents)
     int length = fileContents.length();
     write(newfd, fileCharContents, length);
 }
-/*
-void writeFinalCache()
+
+bool fileInCache(std::string fileNameString, std::string fileContents)
 {
-    while(!cacheQueue.empty() && !cacheContents.empty())
+    for(size_t i = 0; i < cacheQueue.size(); i++)
     {
-        std::string oldFileName = cacheQueue.front();
-        cacheQueue.pop_front();
-        std::string oldFileContents = cacheContents.front();
-        cacheContents.pop_front();
-        writeFromCache(oldFileName, oldFileContents);
+        if(fileNameString.compare(cacheQueue[i]) == 0)
+        {
+            cacheContents[i] = fileContents;
+            return true;
+        }
     }
+    return false;
 }
-*/
+
 void cacheFile(char fileNameChar[], std::string fileContents)
 {
     std::string fileNameString = fileNameChar;
-    if(cachePosition == 3)
+    if(fileInCache(fileNameString, fileContents) == true)
     {
-        for(size_t i = 0; i < cacheSize; i++)
-        {
-            if(fileNameString.compare(cacheQueue[i]) == 0)
-            {
-                cacheContents[i] = fileContents;
-                return;
-            }
-        }
+        printf("The cacheQueue size = %lu\n", cacheQueue.size());
+        printf("The cacheContents size = %lu\n", cacheContents.size());
+        return;
+    }
+    if(cacheQueue.size() == cacheSize)
+    {
         std::string oldFileName = cacheQueue.front();
         cacheQueue.pop_front();
         std::string oldFileContents = cacheContents.front();
         cacheContents.pop_front();
         writeFromCache(oldFileName, oldFileContents);
+        cacheQueue.push_back(fileNameString);
+        cacheContents.push_back(fileContents);
         return;
-    }
+    }   
     cacheQueue.push_back(fileNameString);
     cacheContents.push_back(fileContents);
-    cachePosition++;
+    printf("The cacheQueue size = %lu\n", cacheQueue.size());
+    printf("The cacheContents size = %lu\n", cacheContents.size());
     return;
 }
 
@@ -322,7 +324,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     size_t startPosition;
     size_t totalReadSize = 0;
 
-    //char cacheBuffer[buffSize];
+    std::string fileNameString = fileNameChar;
     std::string cacheFileContents;
 
     if(contLength != -1)
@@ -429,12 +431,12 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
     printf("%s\n", cacheFileContents.c_str());
     printf("The content length is: %lu\n", cacheFileContents.length());
-    if(fileExists == true && ContentLength == true)
+    if((fileExists == true && ContentLength == true) || fileInCache(fileNameString, cacheFileContents) == true)
     {
         char http_header[] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header));      
     }
-    if(fileExists == false && ContentLength == true)
+    if((fileExists == false && ContentLength == true) || fileInCache(fileNameString, cacheFileContents) == false)
     {
         char http_header[] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header)); 
