@@ -39,23 +39,53 @@ struct context{
     std::deque<int> clientQueue;
 };
 
-/*
-void cacheFile(char fileNameChar[], std::string fileContents)
+void writeFromCache(std::string fileName, std::string fileContents)
 {
-    std::string fileNameString = fileNameChar;
-    if(cachePosition )
+    const char* fileNameChar = fileName.c_str();
+    const char* fileCharContents = fileContents.c_str();
+    int newfd = open(fileNameChar, O_CREAT | O_RDWR | O_TRUNC, 0777);
+    int length = fileContents.length();
+    write(newfd, fileCharContents, length);
+}
+/*
+void writeFinalCache()
+{
+    while(!cacheQueue.empty() && !cacheContents.empty())
     {
-        for(int i = 0; i < cacheSize; i++)
-        {
-            if(cacheQueue[i] == )
-            {
-            
-            }
-
-        }
+        std::string oldFileName = cacheQueue.front();
+        cacheQueue.pop_front();
+        std::string oldFileContents = cacheContents.front();
+        cacheContents.pop_front();
+        writeFromCache(oldFileName, oldFileContents);
     }
 }
 */
+void cacheFile(char fileNameChar[], std::string fileContents)
+{
+    std::string fileNameString = fileNameChar;
+    if(cachePosition == 3)
+    {
+        for(size_t i = 0; i < cacheSize; i++)
+        {
+            if(fileNameString.compare(cacheQueue[i]) == 0)
+            {
+                cacheContents[i] = fileContents;
+                return;
+            }
+        }
+        std::string oldFileName = cacheQueue.front();
+        cacheQueue.pop_front();
+        std::string oldFileContents = cacheContents.front();
+        cacheContents.pop_front();
+        writeFromCache(oldFileName, oldFileContents);
+        return;
+    }
+    cacheQueue.push_back(fileNameString);
+    cacheContents.push_back(fileContents);
+    cachePosition++;
+    return;
+}
+
 size_t getOffSet(size_t logLength)
 {
     offSetLock = PTHREAD_MUTEX_INITIALIZER;
@@ -292,7 +322,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     size_t startPosition;
     size_t totalReadSize = 0;
 
-    char cacheBuffer[buffSize];
+    //char cacheBuffer[buffSize];
     std::string cacheFileContents;
 
     if(contLength != -1)
@@ -318,7 +348,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     //Write/create file
     if(contLength != -1)
     {   
-        int newfd = open(fileNameChar, O_CREAT | O_RDWR | O_TRUNC, 0777);
         while(contLength > 0)
         {
             if((size_t)contLength <= buffSize)
@@ -334,16 +363,16 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                     return;
                 }
                 //Copy data to a cache string
-                memset(cacheBuffer, 0, sizeof cacheBuffer);
-                memcpy(cacheBuffer, fileContents, readSize);
-                std::string temp(cacheBuffer, readSize);
+                //memset(cacheBuffer, 0, sizeof cacheBuffer);
+                //memcpy(cacheBuffer, fileContents, readSize);
+                std::string temp(fileContents, readSize);
                 cacheFileContents += temp;
 
                 //Print Log
                 printPUTLog(totalReadSize, readSize, fileContents, startPosition, true);
 
                 //Write to the new File
-                write(newfd, fileContents, readSize);
+                //write(newfd, fileContents, readSize);
 				contLength = contLength - readSize;
 				continue;
             }
@@ -358,9 +387,9 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                 return;
             }
             //Copy data to a cache string
-            memset(cacheBuffer, 0, sizeof cacheBuffer);
-            memcpy(cacheBuffer, fileContents, readSize);
-            std::string temp(cacheBuffer, readSize);
+            //memset(cacheBuffer, 0, sizeof cacheBuffer);
+            //memcpy(cacheBuffer, fileContents, readSize);
+            std::string temp(fileContents, readSize);
             cacheFileContents += temp;
             
             //Print log
@@ -368,10 +397,9 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             totalReadSize += readSize;
 
             //Write to the new file
-            write(newfd, fileContents, readSize);
+            //write(newfd, fileContents, readSize);
             contLength = contLength - readSize;
         }
-        close(newfd);
     }
     else
     {
@@ -398,7 +426,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             printPUTLog(fileInBytes, contLength, fileContents, startPosition, false);
             write(newfd, fileContents, fileInBytes);
         }
-        close(newfd);
     }
     printf("%s\n", cacheFileContents.c_str());
     printf("The content length is: %lu\n", cacheFileContents.length());
@@ -412,6 +439,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
         char http_header[] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header)); 
     }
+    cacheFile(fileNameChar, cacheFileContents);
 }
 
 //Handles GET requests
