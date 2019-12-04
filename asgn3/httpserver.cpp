@@ -40,6 +40,20 @@ struct context{
     std::deque<int> clientQueue;
 };
 
+std::string getFromCache(std::string fileName)
+{
+    std::string cacheContent = "";
+    for(size_t i = 0; i < cacheQueue.size(); i++)
+    {
+        if(fileName.compare(cacheQueue[i]) == 0)
+        {
+            cacheContent = cacheContents[i];
+            return cacheContent;
+        }
+    }
+    return cacheContent;
+}
+
 void writeFromCache(std::string fileName, std::string fileContents)
 {
     const char* fileNameChar = fileName.c_str();
@@ -49,7 +63,7 @@ void writeFromCache(std::string fileName, std::string fileContents)
     write(newfd, fileCharContents, length);
 }
 
-bool compareCache(std::string fileNameString)
+bool checkInCache(std::string fileNameString)
 {
     for(size_t i = 0; i < cacheQueue.size(); i++)
     {
@@ -126,7 +140,7 @@ size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
     std::string putLog = "PUT " + fileNameString + " length " + contLenString + "\n";
     if(cachingFlag == true)
     {
-        if(compareCache(fileNameString) == true)
+        if(checkInCache(fileNameString) == true)
         {
             putLog = "PUT " + fileNameString + " length " + contLenString + " " + inCacheMessage +"\n";
         }
@@ -201,17 +215,28 @@ size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], s
 }
 
 void printGETLog(char fileNameChar[])
-{   
+{
     if(logFileExists == false)
     {
         return;
+    }  
+
+    std::string fileNameString = fileNameChar;
+    std::string getMessage = "GET " + fileNameString + "length 0\n========\n"; 
+    if(cachingFlag == true)
+    {
+        if(checkInCache(fileNameString) == true)
+        {
+            getMessage = "GET " + fileNameString + " length 0 " + inCacheMessage + "\n========\n"; 
+        }
+        else
+        {
+            getMessage = "GET " + fileNameString + " length 0 " + notInCacheMessage + "\n========\n";
+        }
     }
-    char get[50] = {0};
-    strcpy(get, "GET ");
-    strcat(get, fileNameChar);
-    strcat(get, " length 0\n========\n");
-    size_t logOffSet = getOffSet((size_t)strlen(get));
-    pwrite(logFd, get, strlen(get), logOffSet);
+    int getMsgLength = getMessage.length();
+    size_t logOffSet = getOffSet((size_t)getMsgLength);
+    pwrite(logFd, getMessage.c_str(), getMsgLength, logOffSet);
 }
 
 void printErrorLog(char fileNameChar[], char command[], std::string response)
@@ -455,7 +480,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
     printf("%s\n", cacheFileContents.c_str());
     printf("The content length is: %lu\n", cacheFileContents.length());
-    if((fileExists == true && ContentLength == true) || compareCache(fileNameString) == true)
+    if((fileExists == true && ContentLength == true) || checkInCache(fileNameString) == true)
     {
         char http_header[] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header));      
@@ -480,13 +505,14 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 //Handles GET requests
 void handleGET(char fileNameChar[], int client_fd)
 {
+    std::string fileNameString = fileNameChar;
     char fileContents[buffSize] = {0};
     std::string response = "";
     char get[] = "GET";
     int fileInBytes = 1;
     
     //Check if the file exists
-    if(access(fileNameChar, F_OK) == -1)
+    if(access(fileNameChar, F_OK) == -1 && checkInCache(fileNameString) == false)
     {
         char msg[] = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, strlen(msg));
@@ -494,7 +520,7 @@ void handleGET(char fileNameChar[], int client_fd)
         printErrorLog(fileNameChar, get, response);
         return;
     }
-    if(access(fileNameChar, R_OK) == -1)
+    if(access(fileNameChar, R_OK) == -1 && checkInCache(fileNameString) == false)
     {
         char msg[] = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         write(client_fd, msg, strlen(msg));
@@ -503,6 +529,21 @@ void handleGET(char fileNameChar[], int client_fd)
         return;
     } 
     
+    //Print from cache
+    if(cachingFlag == true)
+    {
+        std::string cacheContent = getFromCache(fileNameString);
+        if(cacheContent.empty() != true)
+        {
+            int contentLength = cacheContent.length();
+            std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\r\n\r\n";
+            write(client_fd, clientHeader.c_str(), clientHeader.length());
+            write(client_fd, cacheContent.c_str(), contentLength);
+            printf("Got data from the cache!!\n");
+            return;
+        }
+    }
+
     //Print out content length with header
     struct stat statVal;
     stat(fileNameChar, &statVal);
@@ -522,7 +563,6 @@ void handleGET(char fileNameChar[], int client_fd)
         printGETLog(fileNameChar);
     }
     close(newfd);
-
 }
 
 void handleClient(int client_fd)
