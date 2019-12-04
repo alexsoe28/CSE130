@@ -214,19 +214,14 @@ size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], s
     return newPosition;
 }
 
-void printGETLog(char fileNameChar[])
-{
-    if(logFileExists == false)
-    {
-        return;
-    }  
-
-    std::string fileNameString = fileNameChar;
+void printGETLog(std::string fileNameString)
+{  
     std::string getMessage = "GET " + fileNameString + "length 0\n========\n"; 
     if(cachingFlag == true)
     {
         if(checkInCache(fileNameString) == true)
         {
+            printf("Printing Logfile from GET\n");
             getMessage = "GET " + fileNameString + " length 0 " + inCacheMessage + "\n========\n"; 
         }
         else
@@ -528,7 +523,12 @@ void handleGET(char fileNameChar[], int client_fd)
         printErrorLog(fileNameChar, get, response);
         return;
     } 
-    
+
+    //Print GET log
+    if(logFileExists == true){
+        printGETLog(fileNameString);
+    }
+
     //Print from cache
     if(cachingFlag == true)
     {
@@ -558,9 +558,6 @@ void handleGET(char fileNameChar[], int client_fd)
         memset(fileContents, 0, buffSize);
         fileInBytes = read(newfd, fileContents, buffSize);
         write(client_fd, fileContents, fileInBytes);
-    }
-    if(logFileExists == true){
-        printGETLog(fileNameChar);
     }
     close(newfd);
 }
