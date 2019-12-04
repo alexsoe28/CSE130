@@ -28,7 +28,8 @@ size_t offSet = 0;
 bool logFileExists = false;
 pthread_mutex_t offSetLock;
 
-size_t cachePosition = 0;
+std::string inCacheMessage = "[was in cache]";
+std::string notInCacheMessage = "[was not in cache]";
 bool cachingFlag = false;
 std::deque<std::string> cacheContents;
 std::deque<std::string> cacheQueue;
@@ -48,7 +49,20 @@ void writeFromCache(std::string fileName, std::string fileContents)
     write(newfd, fileCharContents, length);
 }
 
-bool fileInCache(std::string fileNameString, std::string fileContents)
+bool compareCache(std::string fileNameString)
+{
+    for(size_t i = 0; i < cacheQueue.size(); i++)
+    {
+        if(fileNameString.compare(cacheQueue[i]) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+bool updateCache(std::string fileNameString, std::string fileContents)
 {
     for(size_t i = 0; i < cacheQueue.size(); i++)
     {
@@ -64,7 +78,7 @@ bool fileInCache(std::string fileNameString, std::string fileContents)
 void cacheFile(char fileNameChar[], std::string fileContents)
 {
     std::string fileNameString = fileNameChar;
-    if(fileInCache(fileNameString, fileContents) == true)
+    if(updateCache(fileNameString, fileContents) == true)
     {
         printf("The cacheQueue size = %lu\n", cacheQueue.size());
         printf("The cacheContents size = %lu\n", cacheContents.size());
@@ -110,7 +124,17 @@ size_t printPUTLogHeader(char fileNameChar[], ssize_t contLength)
     std::string contLenString = std::to_string((int)contLength);
     std::string fileNameString = fileNameChar;
     std::string putLog = "PUT " + fileNameString + " length " + contLenString + "\n";
-   
+    if(cachingFlag == true)
+    {
+        if(compareCache(fileNameString) == true)
+        {
+            putLog = "PUT " + fileNameString + " length " + contLenString + " " + inCacheMessage +"\n";
+        }
+        else
+        {
+            putLog = "PUT " + fileNameString + " length " + contLenString + " " + notInCacheMessage +"\n";
+        }
+    }
     int numLines = (ceil((double)contLength/20.0));
 
     size_t putOffSet = putLog.length() + (9 * numLines) + 
@@ -431,17 +455,26 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
     printf("%s\n", cacheFileContents.c_str());
     printf("The content length is: %lu\n", cacheFileContents.length());
-    if((fileExists == true && ContentLength == true) || fileInCache(fileNameString, cacheFileContents) == true)
+    if((fileExists == true && ContentLength == true) || compareCache(fileNameString) == true)
     {
         char http_header[] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header));      
     }
-    if((fileExists == false && ContentLength == true) || fileInCache(fileNameString, cacheFileContents) == false)
+    if((fileExists == false && ContentLength == true))
     {
         char http_header[] = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"; 
         write(client_fd, http_header, strlen(http_header)); 
     }
-    cacheFile(fileNameChar, cacheFileContents);
+    if(cachingFlag == true)
+    {
+        cacheFile(fileNameChar, cacheFileContents);
+    }
+    else
+    {
+        int newfd = open(fileNameChar, O_CREAT | O_RDWR | O_TRUNC, 0777);
+        write(newfd, cacheFileContents.c_str(), cacheFileContents.length());
+        close(newfd);
+    }
 }
 
 //Handles GET requests
