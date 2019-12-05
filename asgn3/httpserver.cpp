@@ -89,9 +89,8 @@ bool updateCache(std::string fileNameString, std::string fileContents)
     return false;
 }
 
-void cacheFile(char fileNameChar[], std::string fileContents)
+void cacheFile(std::string fileNameString, std::string fileContents)
 {
-    std::string fileNameString = fileNameChar;
     if(updateCache(fileNameString, fileContents) == true)
     {
         printf("The cacheQueue size = %lu\n", cacheQueue.size());
@@ -408,17 +407,11 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
                     close(client_fd);
                     return;
                 }
-                //Copy data to a cache string
-                //memset(cacheBuffer, 0, sizeof cacheBuffer);
-                //memcpy(cacheBuffer, fileContents, readSize);
                 std::string temp(fileContents, readSize);
                 cacheFileContents += temp;
 
                 //Print Log
                 printPUTLog(totalReadSize, readSize, fileContents, startPosition, true);
-
-                //Write to the new File
-                //write(newfd, fileContents, readSize);
 				contLength = contLength - readSize;
 				continue;
             }
@@ -487,7 +480,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
     }
     if(cachingFlag == true)
     {
-        cacheFile(fileNameChar, cacheFileContents);
+        cacheFile(fileNameString, cacheFileContents);
     }
     else
     {
@@ -501,6 +494,7 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
 void handleGET(char fileNameChar[], int client_fd)
 {
     std::string fileNameString = fileNameChar;
+    std::string fileContStr = "";
     char fileContents[buffSize] = {0};
     std::string response = "";
     char get[] = "GET";
@@ -557,8 +551,17 @@ void handleGET(char fileNameChar[], int client_fd)
     {
         memset(fileContents, 0, buffSize);
         fileInBytes = read(newfd, fileContents, buffSize);
-        write(client_fd, fileContents, fileInBytes);
+        std::string temp(fileContents, fileInBytes);
+        fileContStr += temp;
     }
+    printf("The string being printed to the cache is %s\n", fileContStr.c_str());
+    if(cachingFlag == true)
+    {
+        printf("Updating cache!\n");
+        cacheFile(fileNameString, fileContStr);
+    }
+    printf("Printing to file!!\n");
+    write(client_fd, fileContStr.c_str(), fileContStr.length());
     close(newfd);
 }
 
