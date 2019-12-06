@@ -93,8 +93,6 @@ void cacheFile(std::string fileNameString, std::string fileContents)
 {
     if(updateCache(fileNameString, fileContents) == true)
     {
-        printf("The cacheQueue size = %lu\n", cacheQueue.size());
-        printf("The cacheContents size = %lu\n", cacheContents.size());
         return;
     }
     if(cacheQueue.size() == cacheSize)
@@ -110,8 +108,6 @@ void cacheFile(std::string fileNameString, std::string fileContents)
     }   
     cacheQueue.push_back(fileNameString);
     cacheContents.push_back(fileContents);
-    printf("The cacheQueue size = %lu\n", cacheQueue.size());
-    printf("The cacheContents size = %lu\n", cacheContents.size());
     return;
 }
 
@@ -215,12 +211,11 @@ size_t printPUTLog(size_t totalReadSize, size_t readSize, char fileContents[], s
 
 void printGETLog(std::string fileNameString)
 {  
-    std::string getMessage = "GET " + fileNameString + "length 0\n========\n"; 
+    std::string getMessage = "GET " + fileNameString + " length 0\n========\n"; 
     if(cachingFlag == true)
     {
         if(checkInCache(fileNameString) == true)
         {
-            printf("Printing Logfile from GET\n");
             getMessage = "GET " + fileNameString + " length 0 " + inCacheMessage + "\n========\n"; 
         }
         else
@@ -466,8 +461,6 @@ void handlePUT(char fileNameChar[], ssize_t contLength, int client_fd)
             write(newfd, fileContents, fileInBytes);
         }
     }
-    printf("%s\n", cacheFileContents.c_str());
-    printf("The content length is: %lu\n", cacheFileContents.length());
     if((fileExists == true && ContentLength == true) || checkInCache(fileNameString) == true)
     {
         char http_header[] = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"; 
@@ -533,7 +526,6 @@ void handleGET(char fileNameChar[], int client_fd)
             std::string clientHeader = "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(contentLength) + "\r\n\r\n";
             write(client_fd, clientHeader.c_str(), clientHeader.length());
             write(client_fd, cacheContent.c_str(), contentLength);
-            printf("Got data from the cache!!\n");
             return;
         }
     }
@@ -554,13 +546,10 @@ void handleGET(char fileNameChar[], int client_fd)
         std::string temp(fileContents, fileInBytes);
         fileContStr += temp;
     }
-    printf("The string being printed to the cache is %s\n", fileContStr.c_str());
     if(cachingFlag == true)
     {
-        printf("Updating cache!\n");
         cacheFile(fileNameString, fileContStr);
     }
-    printf("Printing to file!!\n");
     write(client_fd, fileContStr.c_str(), fileContStr.length());
     close(newfd);
 }
